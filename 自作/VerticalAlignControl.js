@@ -2,7 +2,7 @@
  * @plugindesc 行内の文字にサイズ差がある場合の縦方向揃えを変更する制御文字追加プラグイン
  * @target MZ
  * @help
- * MessageHeightAlign.js
+ * VerticalAlignControl.js
  * 
  * うまく説明できないけど文章の表示で
  * 
@@ -45,7 +45,7 @@
 
 (() => {
 
-    const PN = 'MessageHeightAlign';
+    const PN = 'VerticalAlignControl';
     const param = PluginManager.parameters(PN);
     const topCharacter = (param.top || "TA");
     const centerCharacter = (param.center || "CA");
