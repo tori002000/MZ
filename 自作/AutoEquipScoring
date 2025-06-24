@@ -2,7 +2,7 @@
  * @target MZ
  * @plugindesc 最強装備の評価ポイント操作プラグイン
  * @author やっつけ
- * @help EquipPerformanceControll.js
+ * @help AutoEquipScoring.js
  * 
  * 「攻撃力100の剣より攻撃力5＆最大HP100アップのナイフの方が強い」…
  * おかしいよなぁコレ！？
@@ -29,7 +29,7 @@
  * @url https://www.yahoo.co.jp/
  */
 (() => {
-    const PN = 'EquipPerformanceControll';
+    const PN = 'AutoEquipScoring';
 
     Game_Actor.prototype.bestEquipItem = function(slotId) {
         const etypeId = this.equipSlots()[slotId];
