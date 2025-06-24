@@ -34,7 +34,7 @@
  * @type file[]
  */
 (() => {
-    const pluginName = "DisableDecryption";
+    const pluginName = "DisableImageDecryption";
     const parameters = PluginManager.parameters(pluginName);
     const Directroy = JSON.parse(parameters['Directroy'] || 0);
     const ImageFiles = JSON.parse(parameters['ImageFiles'] || 0);
