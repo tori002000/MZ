@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <title>文章の表示コマンド変換ツール</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 1em;
+        }
+
+        #drop-area {
+            border: 2px dashed #ccc;
+            padding: 2em;
+            margin-bottom: 1em;
+            text-align: center;
+        }
+
+        textarea {
+            width: 100%;
+            height: 25em;
+            margin-top: 1em;
+            font-family: "MS Gothic", sans-serif;
+            font-size: 16px;
+            background: linear-gradient(to right, transparent 385px, lightgray 386px, transparent 386px, transparent 481px, gray 482px, transparent 482px);
+        }
+
+        .collapsible {
+            cursor: pointer;
+            margin-top: 1em;
+        }
+
+        .collapsible::after {
+            content: ' ▶';
+        }
+
+        .collapsible.active::after {
+            content: ' ▼';
+        }
+
+        .content {
+            display: none;
+            border-top: none;
+            white-space: pre-wrap;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>文章の表示コマンド変換ツール</h1>
+
+    <div class="collapsible" id="helpToggle">説明書</div>
+    <div class="content" id="helpContent">
+        このツールは、テキストをRPGツクールMZの[文章の表示]コマンド形式に変換し、
+        対象のマップファイル（MapXXX.json）のイベントに書き込むことができます。
+        
+        ■■  必ずマップファイルのバックアップを取ってから使用してください。  ■■
+
+        【操作手順】
+        ・マップファイル（MapXXX.json）を読み込み（イベントが1つ以上配置されているもの）
+        ・イベントおよびそのページを選択して書き込む対象を決定
+        ・テキストボックスに[文章の表示]で表示させたいテキストを入力する
+        ・「文章の表示コマンドに変換して保存」を押し、マップファイルを上書き保存する
+
+        【テキストの書き方】
+        ・空行が[文章の表示]コマンドの区切りになります。
+        ・文頭に [%] （設定で変更可能）が書かれた行はコメントアウトされます。
+        ・区切りの最初の行にタグを書くことで顔グラフィック、背景、位置、名前を指定できます。
+            タグの記法はText2Frameを真似ているためそちらも参照してください。
+
+        例1: &lt;顔: Actor1(0)&gt;&lt;背景: ウィンドウ&gt;&lt;位置: 下&gt;&lt;名前: リード&gt;
+        例2: &lt;Background: Dim&gt;&lt;WindowPosition: Middle&gt;
+
+        【その他の機能】
+        ・テキストボックスに24文字（顔グラフィック表示時の1行の文字数）のラインと
+            30文字（1行の文字数）のラインを表示
+        ・タグを書き込まない場合の背景、位置のデフォルト値の設定
+        ・選択中のイベントページに存在する[文章の表示]コマンドからテキストを抽出
+
+        動作確認をしているのはMZでのみですがMVでも使えるはずです。
+
+        コモンイベントに対応
+        CommonEvents.jsonを読み込んでマップイベントと同様に取り扱えるように
+    </div>
+    <div class="collapsible" id="optionToggle">オプション設定</div>
+    <div class="content" id="optionContent">
+        <label for="saveMode">・書き込み方式: </label><select id="saveMode">
+            <option value="overwrite">上書き</option>
+            <option value="append">末尾に追加</option>
+        </select>
+        保存時のイベントページへの書き込み方式を設定します。
+        [上書き]: 既存のコマンドは消去され、新しく[文章の表示]コマンドを記入
+        [末尾に追加]: 既存のコマンドはそのまま、末尾に[文章の表示]コマンドを追加
+
+        <label>・パラメータのデフォルト設定: </label><label for="defaultBg">　背景: </label><select id="defaultBg">
+            <option value="0">ウィンドウ</option>
+            <option value="1">暗くする</option>
+            <option value="2">透明</option>
+        </select><label for="defaultPos">　位置: </label><select id="defaultPos">
+            <option value="0">上</option>
+            <option value="1">中</option>
+            <option value="2" selected>下</option>
+        </select>
+        &lt;背景: ～&gt;、&lt;位置: ～&gt;タグのデフォルト値を設定します。
+        タグでの指定がない場合はこの設定が適用されます。
+
+        <label for="commentPrefix">・コメント記号: </label><input type="text" id="commentPrefix" value="%" style="width: 3em;">
+        コメント記号を設定します。
+        設定された文字が文頭に置かれた行はコメントとして扱われ、保存時には無視されます。
+    </div>
+    <br>
+    <div id="drop-area" style="cursor: pointer;">
+        dataフォルダ内のMapXXX.json あるいは CommonEvents.jsonをここにドロップ<br>またはクリックして選択
+        <input type="file" id="fileInput" accept=".json" style="display: none;">
+    </div>
+    <p id="fileNameLabel">読み込みファイル:</p>
+    <br>
+    <label for="eventSelect">イベントを選択:</label>
+    <select id="eventSelect"></select>
+    <label for="pageSelect">ページを選択:</label>
+    <select id="pageSelect"></select>
+    <br>
+    <button id="extractTextBtn">イベントページからテキストを抽出</button>
+    <label>文章の表示以外のコマンドは読み込みません</label>
+    <br>
+    <textarea id="textArea" placeholder="ここにテキストを入力します"></textarea>
+    <br>
+    <button id="convertToCommandBtn">文章の表示コマンドに変換して保存</button>
+    <script>
+        let mapData = null;
+        let loadedFileName = null;
+        let isCommonEventMode = false;
+        const dropArea = document.getElementById('drop-area');
+        const fileInput = document.getElementById('fileInput');
+        const uiElements = [
+            document.getElementById('eventSelect'),
+            document.getElementById('pageSelect'),
+            document.getElementById('extractTextBtn'),
+            document.getElementById('convertToCommandBtn'),
+        ];
+
+        function setUIEnabled(enabled) {
+            uiElements.forEach(el => el.disabled = !enabled);
+        };
+        setUIEnabled(false);
+
+        document.getElementById('helpToggle').addEventListener('click', () => {
+            const toggle = document.getElementById('helpToggle');
+            const content = document.getElementById('helpContent');
+            const isOpen = toggle.classList.toggle('active');
+            content.style.display = isOpen ? 'block' : 'none';
+        });
+
+        document.getElementById('optionToggle').addEventListener('click', () => {
+            const toggle = document.getElementById('optionToggle');
+            const content = document.getElementById('optionContent');
+            const isOpen = toggle.classList.toggle('active');
+            content.style.display = isOpen ? 'block' : 'none';
+        });
+        // ドロップで読み込み
+        dropArea.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
+        });
+        dropArea.addEventListener('drop', e => {
+            e.preventDefault();
+            const file = e.dataTransfer.files[0];
+            if (file) readJsonFile(file);
+        });
+
+        // クリックでファイル選択ダイアログ
+        dropArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // inputからのファイル選択
+        fileInput.addEventListener('change', () => {
+            const file = fileInput.files[0];
+            if (file) readJsonFile(file);
+            fileInput.value = ''; // 同じファイルを連続で選べるように
+        });
+
+        // JSON読み込み処理
+        function readJsonFile(file) {
+            const reader = new FileReader();
+            loadedFileName = file.name;
+            reader.onload = event => {
+                try {
+                    const data = JSON.parse(event.target.result);
+                    if (Array.isArray(data)) {
+                        // コモンイベント形式の検査（nullを除外）
+                        const isValid = data
+                            .filter(ev => ev !== null)
+                            .every(ev =>
+                                typeof ev.id === "number" &&
+                                typeof ev.name === "string" &&
+                                Array.isArray(ev.list)
+                            );
+                        if (!isValid) throw new Error("コモンイベント形式ではありません。");
+                        const obj = { events: data };
+                        mapData = obj;
+                        isCommonEventMode = true;
+                        populateCommonEventSelect();
+                    } else if (data.events) {
+                        // マップイベント形式
+                        mapData = data;
+                        isCommonEventMode = false;
+                        populateEventSelect();
+                    } else {
+                        alert("不明な形式のJSONファイルです。");
+                        return;
+                    }
+                    document.getElementById('fileNameLabel').textContent = `読み込みファイル: ${loadedFileName}`;
+                    setUIEnabled(true);
+                } catch (err) {
+                    setUIEnabled(false);
+                    alert('JSONの解析に失敗しました。');
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        document.getElementById('eventSelect').addEventListener('change', (e) => {
+            const eventId = e.target.value;
+            if (!isCommonEventMode) {
+                populatePageSelect(eventId);
+            }
+        });
+
+        function getSelectedPage() {
+            const eventId = document.getElementById('eventSelect').value;
+            if (isCommonEventMode) {
+                const event = mapData.events?.[eventId];
+                if (!event) {
+                    alert(`コモンイベントID ${eventId} が見つかりません。`);
+                    throw new Error(`コモンイベントID ${eventId} が無効です`);
+                }
+                return event; // listプロパティを使う
+            } else {
+                const pageIndex = Number(document.getElementById('pageSelect').value);
+                const event = mapData.events?.[eventId];
+                if (!event) {
+                    alert(`イベントID ${eventId} が見つかりません。`);
+                    throw new Error(`イベントID ${eventId} が無効です`);
+                }
+                const page = event.pages?.[pageIndex];
+                if (!page) {
+                    alert(`イベント「${event.name}」のページ ${pageIndex + 1} が見つかりません。`);
+                    throw new Error(`ページインデックス ${pageIndex} が無効です`);
+                }
+                return page;
+            }
+        }
+
+        function populateEventSelect() {
+            const select = document.getElementById('eventSelect');
+            select.innerHTML = '';
+            Object.entries(mapData.events).forEach(([id, event]) => {
+                if (event) {
+                    const option = document.createElement('option');
+                    option.value = id;
+                    option.textContent = `ID:${id} ${event.name}`;
+                    select.appendChild(option);
+                }
+            });
+            if (select.options.length > 0) {
+                select.selectedIndex = 0;
+                populatePageSelect(select.value);
+            }
+        }
+
+        function populatePageSelect(eventId) {
+            const event = mapData.events[eventId];
+            const select = document.getElementById('pageSelect');
+            select.innerHTML = '';
+            event.pages.forEach((page, index) => {
+                const option = document.createElement('option');
+                option.value = index;
+                option.textContent = `ページ ${index + 1}`;
+                select.appendChild(option);
+            });
+        }
+
+        function populateCommonEventSelect() {
+            const select = document.getElementById('eventSelect');
+            const pageSelect = document.getElementById('pageSelect');
+            select.innerHTML = '';
+            pageSelect.innerHTML = '<option value="0">－</option>';
+            Object.entries(mapData.events).forEach(([id, ev]) => {
+                if (ev) {
+                    const option = document.createElement('option');
+                    option.value = ev.id;
+                    option.textContent = `ID:${ev.id} ${ev.name}`;
+                    select.appendChild(option);
+                }
+            });
+        }
+
+        const getDefaultBg = () => Number(document.getElementById('defaultBg').value);
+        const getDefaultPos = () => Number(document.getElementById('defaultPos').value);
+        const commentPrefix = document.getElementById('commentPrefix').value;
+
+        document.getElementById('extractTextBtn').addEventListener('click', () => {
+            const textArea = document.getElementById('textArea');
+            const currentText = textArea.value.trim();
+            if (currentText !== "") {
+                const confirmed = window.confirm("現在のテキストは破棄されます。抽出しますか？");
+                if (!confirmed) return;
+            }
+
+            const id = document.getElementById('eventSelect').value;
+            const event = mapData.events[id];
+            const page = getSelectedPage();
+            const result = [];
+            let buffer = [];
+            const defaultBg = getDefaultBg();
+            const defaultPos = getDefaultPos();
+
+            for (let i = 0; i < page.list.length; i++) {
+                const cmd = page.list[i];
+                if (cmd.code === 101) {
+                    if (buffer.length > 0) result.push(buffer.join('\n'), '');
+                    buffer = [];
+
+                    const [faceFile, faceId, bg, wp, name] = cmd.parameters;
+                    const tags = [];
+
+                    if (faceFile && faceFile !== "") tags.push(`<顔: ${faceFile}(${faceId})>`);
+                    if (typeof bg === "number" && bg !== defaultBg) {
+                        tags.push(`<背景: ${["ウィンドウ", "暗くする", "透明"][bg]}>`);
+                    }
+                    if (typeof wp === "number" && wp !== defaultPos) {
+                        tags.push(`<位置: ${["上", "中", "下"][wp]}>`);
+                    }
+                    if (name && name !== "") tags.push(`<名前: ${name}>`);
+
+                    if (tags.length > 0) buffer.push(tags.join(''));
+                } else if (cmd.code === 401) {
+                    buffer.push(cmd.parameters[0]);
+                }
+            }
+            if (buffer.length > 0) result.push(buffer.join('\n'));
+
+            document.getElementById('textArea').value = result.join('\n');
+        });
+
+        document.getElementById('convertToCommandBtn').addEventListener('click', () => {
+            const id = document.getElementById('eventSelect').value;
+            const event = mapData.events[id];
+            const page = getSelectedPage();
+            const lines = document.getElementById('textArea').value.split('\n');
+            const saveMode = document.getElementById('saveMode').value;
+            const appendMode = (saveMode === 'append');
+            const commandList = [];
+            let currentTextBlock = [];
+            let parameters = ["", 0, getDefaultBg(), getDefaultPos(), ""];
+
+            const pushTextBlock = () => {
+                if (currentTextBlock.length > 0) {
+                    commandList.push({ code: 101, indent: 0, parameters: [...parameters] });
+                    currentTextBlock.forEach(line => {
+                        commandList.push({ code: 401, indent: 0, parameters: [line] });
+                    });
+                    currentTextBlock = [];
+                    parameters = ["", 0, getDefaultBg(), getDefaultPos(), ""];
+                }
+            };
+
+            const parseTags = (line) => {
+                let matched = false;
+
+                const faceTag = line.match(/<(?:Face|FC|顔):\s*([^\(\)]+)\s*\((\d+)\)>/i);
+                const bgTag = line.match(/<(?:Background|BG|背景):\s*([^>]+)>/i);
+                const wpTag = line.match(/<(?:WindowPosition|WP|位置):\s*([^>]+)>/i);
+                const nameTag = line.match(/<(?:Name|NM|名前):\s*(.+?)>/i);
+
+                if (faceTag) {
+                    parameters[0] = faceTag[1];
+                    parameters[1] = Number(faceTag[2]);
+                    matched = true;
+                }
+                if (bgTag) {
+                    const map = { "window": 0, "ウィンドウ": 0, "dim": 1, "暗くする": 1, "transparent": 2, "透明": 2 };
+                    parameters[2] = map[bgTag[1].toLowerCase()] ?? parameters[2];
+                    matched = true;
+                }
+                if (wpTag) {
+                    const map = { "top": 0, "上": 0, "middle": 1, "中": 1, "bottom": 2, "下": 2 };
+                    parameters[3] = map[wpTag[1].toLowerCase()] ?? parameters[3];
+                    matched = true;
+                }
+                if (nameTag) {
+                    parameters[4] = nameTag[1];
+                    matched = true;
+                }
+                return matched;
+            };
+            for (let line of lines) {
+                if (commentPrefix && line.startsWith(commentPrefix)) continue;
+
+                if (line === '') {
+                    pushTextBlock();
+                } else if (currentTextBlock.length === 0 && line.startsWith('<')) {
+                    const tagMatched = parseTags(line);
+                    if (!tagMatched) {
+                        currentTextBlock.push(line);
+                    }
+                } else {
+                    currentTextBlock.push(line);
+                }
+            }
+
+            pushTextBlock();
+
+            if (appendMode) {
+                // 末尾に追加（ただし、末尾の code:0 を除去してから）
+                if (page.list.length > 0 && page.list.at(-1).code === 0) {
+                    page.list.pop();
+                }
+                page.list.push(...commandList, { code: 0, indent: 0, parameters: [] });
+            } else {
+                // 上書き
+                page.list = [...commandList, { code: 0, indent: 0, parameters: [] }];
+            }
+
+            if (isCommonEventMode) {
+                downloadJson(mapData.events, loadedFileName || "CommonEvents.json");
+            }else{
+                downloadJson(mapData, loadedFileName || "MapEdited.json");
+            }
+        });
+
+        function downloadJson(obj, filename) {
+            const blob = new Blob([JSON.stringify(obj, null, 2)], { type: "application/json" });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            link.click();
+        }
+    </script>
+</body>
+
+</html>
