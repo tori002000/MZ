@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>エロステータスエディターGUI</title>
+    <style>
+        /*
+        @import url('https://fonts.googleapis.com/css2?family=M+PLUS+1p:wght@400&display=swap');
+        */
+        body {
+            text-align:
+                center;
+            font-family:
+                Arial,
+                sans-serif;
+        }
+
+        #controls {
+            margin:
+                10px;
+        }
+
+        #drop-area {
+            width:
+                816px;
+            height:
+                624px;
+            border:
+                2px dashed #ccc;
+            display:
+                flex;
+            align-items:
+                center;
+            justify-content:
+                center;
+            position:
+                relative;
+            margin:
+                auto;
+            overflow:
+                hidden;
+            background-color:
+                #f8f8f8;
+        }
+
+        .resize-handle {
+            width:
+                10px;
+            height:
+                10px;
+            background-color:
+                #fff;
+            border:
+                1px solid #000;
+            position:
+                absolute;
+            bottom:
+                0;
+            right:
+                0;
+            cursor:
+                se-resize;
+        }
+
+        .draggable {
+            position:
+                absolute;
+            cursor:
+                grab;
+            display:
+                inline-block;
+            user-select:
+                none;
+        }
+
+        .draggableText {
+            position:
+                absolute;
+            cursor:
+                grab;
+            display:
+                inline-block;
+            font-family:
+                'M PLUS 1p', Arial, sans-serif;
+            font-size:
+                26px;
+            color:
+                white;
+            -webkit-text-stroke:
+                2px black;
+            paint-order:
+                stroke;
+            user-select:
+                none;
+        }
+
+        #img-x,
+        #img-y,
+        #img-scale,
+        #img-opacity {
+            width:
+                60px;
+        }
+
+        #text-x,
+        #text-y,
+        #text-size {
+            width:
+                60px;
+        }
+
+        #info-container {
+            display:
+                flex;
+            justify-content:
+                center;
+            margin:
+                0 auto;
+            width:
+                900px;
+            gap:
+                0px;
+        }
+
+        #info,
+        #text-controls {
+            flex:
+                1;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>EstエディターGUI</h1>
+    <div id="controls">
+        <label for="area-width">表示領域の幅:</label>
+        <input type="number" id="area-width" value="816" min="100" max="1000"> px
+        <label for="area-height">表示領域の高さ:</label>
+        <input type="number" id="area-height" value="624" min="100" max="800"> px
+        <button onclick="updateDropAreaSize()">適用</button>
+    </div>
+    <div id="drop-area">
+        <span id="drop-area-message">ここに画像をドロップするか、ファイルを選択してください</span>
+    </div>
+
+    <div id="info-container">
+        <div id="info">
+            <h3>画像情報</h3>
+            <input type="file" id="file-input" accept="image/*">
+            <br>
+            <br>
+            <label>ファイル名: <span id="img-filename"></span></label>
+            <br>
+            <label>X: <input type="number" id="img-x" value="0"></label>
+            <label>Y: <input type="number" id="img-y" value="0"></label>
+            <br>
+            <label>拡大率(%): <input type="number" id="img-scale" value="100"></label>
+            <label>不透明度(%): <input type="number" id="img-opacity" value="100" min="0" max="100"></label>
+            <br>
+            <button onclick="updateImageProperties()">適用</button>
+            <button onclick="deleteImage()">消去</button>
+        </div>
+        <div id="text-controls">
+            <h3>テキスト情報</h3>
+            <label for="text-input">テキストを追加:</label>
+            <input type="text" id="text-input">
+            <button onclick="addText()">追加</button>
+            <br>
+            <br>
+            <label>選択中のテキスト: <input type="text" id="selected-text" readonly></label>
+            <br>
+            <label>X: <input type="number" id="text-x" value="0"></label>
+            <label>Y: <input type="number" id="text-y" value="0"></label>
+            <br>
+            <label>サイズ(px): <input type="number" id="text-size" value=""></label>
+            <br>
+            <button onclick="updateTextProperties()">適用</button>
+            <button onclick="deleteText()">消去</button>
+        </div>
+    </div>
+    <br>
+    <br>
+    <br><label>CommonEvents.json読み込み</label>
+    <br>
+    <input type="file" id="commonEventsFile" accept=".json">
+    <select id="commonEventSelector"></select>
+    <br>
+    <br>
+    <button id="exportButton" onclick="exportModifiedJson()" disabled>保存</button>
+    <br>
+    <br>
+    <br>
+    <label>CommonEvents.jsonを読み込み、上書きするイベントIDを選択して保存ボタンから保存してください</label>
+    <br>
+    <label><B>事前のバックアップを推奨します</B></label>
+    <br>
+    <br>
+    <br>
+    <br>
+    <label>このツールはCOBRAさん作のエロステータスプラグイン（MZ）の画面作成補助ツールです。</label>
+    <br>
+    <label>画像・テキストの挿入の他、画像をドラッグで移動・拡大縮小ができます。</label>
+    <br>
+    <label>文字色や変数など制御文字には対応していません。画面上の配置の補助にご利用ください。</label>
+    <script>
+        const fileInput = document.getElementById("file-input");
+        const dropArea = document.getElementById("drop-area");
+        const dropAreaMessage = document.getElementById("drop-area-message");
+        const areaWidthInput = document.getElementById("area-width");
+        const areaHeightInput = document.getElementById("area-height");
+        const imgXInput = document.getElementById("img-x");
+        const imgYInput = document.getElementById("img-y");
+        const imgScaleInput = document.getElementById("img-scale");
+        const imgOpacityInput = document.getElementById("img-opacity");
+        const imgFilename = document.getElementById("img-filename");
+        const textInput = document.getElementById("text-input");
+        const textXInput = document.getElementById("text-x");
+        const textYInput = document.getElementById("text-y");
+        const textSizeInput = document.getElementById("text-size");
+        const selectedText = document.getElementById("selected-text");
+        let currentContainer = null;
+        let currentTextElement = null;
+        const imageData = new Map();
+        const textData = new Map();
+        let commonEvents = [];
+
+
+        fileInput.addEventListener("change", (e) => {
+            handleFile(e.target.files);
+        });
+        dropArea.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy"; // ドロップ効果をコピーに設定
+        });
+        dropArea.addEventListener("drop", (e) => {
+            e.preventDefault();
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files);
+            }
+        });
+        textInput.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") {
+                addText();
+            }
+        });
+
+        function handleFile(files) {
+            const file = files[0];
+            if (file && file.type.startsWith("image/")) {
+                const container = document.createElement("div");
+                container.type = "image";
+                container.classList.add("draggable");
+                container.style.position = "absolute";
+                container.style.top = "50px";
+                container.style.left = "50px";
+
+                const img = document.createElement("img");
+                img.src = URL.createObjectURL(file);
+                img.onload = () => {
+                    URL.revokeObjectURL(img.src);
+                    imageData.set(img, { filename: file.name, width: img.naturalWidth, height: img.naturalHeight, scale: 100, opacity: 100 });
+                    img.style.width = `${img.naturalWidth}px`;
+                    img.style.height = `${img.naturalHeight}px`;
+                    img.style.opacity = "1";
+                    updateInfo(img);
+                };
+                img.style.display = "block";
+
+                const resizeHandle = document.createElement("div");
+                resizeHandle.classList.add("resize-handle");
+                container.appendChild(resizeHandle);
+
+                container.appendChild(img);
+                dropArea.appendChild(container);
+                makeDraggable(container);
+                makeResizable(container, img, resizeHandle);
+                container.addEventListener("click", () => selectImage(container, img));
+                currentContainer = container;
+                dropAreaMessage.style.display = "none";
+            }
+        }
+        function makeResizable(container, img, handle) {
+            let isResizing = false;
+            let startX, startY, startWidth, startHeight;
+
+            handle.addEventListener("mousedown", (e) => {
+                isResizing = true;
+                startX = e.clientX;
+                startY = e.clientY;
+                startWidth = parseInt(document.defaultView.getComputedStyle(img).width, 10);
+                startHeight = parseInt(document.defaultView.getComputedStyle(img).height, 10);
+                aspectRatio = startWidth / startHeight;
+                document.body.style.userSelect = "none";
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            document.addEventListener("mousemove", (e) => {
+                if (!isResizing) return;
+                const deltaX = e.clientX - startX;
+                const deltaY = e.clientY - startY;
+                let newWidth = startWidth + deltaX;
+                let newHeight = startHeight + deltaY;
+
+                if (newWidth / newHeight > aspectRatio) {
+                    newHeight = newWidth / aspectRatio;
+                } else {
+                    newWidth = newHeight * aspectRatio;
+                }
+
+                img.style.width = `${newWidth}px`;
+                img.style.height = `${newHeight}px`;
+
+                const scale = Math.round((newWidth / imageData.get(img).width) * 100);
+                imgScaleInput.value = scale;
+            });
+
+            document.addEventListener("mouseup", (e) => {
+                if (isResizing) {
+                    isResizing = false;
+                    document.body.style.userSelect = "";
+                    const scale = Math.round((parseInt(img.style.width, 10) / imageData.get(img).width) * 100);
+                    imageData.get(img).scale = scale;
+                    updateImageProperties();
+                    e.stopPropagation();
+                }
+            });
+        }
+
+        function addText() {
+            const text = textInput.value;
+            if (!text) return;
+
+            const textElement = document.createElement("div");
+            textElement.type = "text";
+            textElement.textContent = text;
+            textElement.classList.add("draggableText");
+            textElement.style.position = "absolute";
+            textElement.style.top = "50px";
+            textElement.style.left = "50px";
+            textElement.style.fontSize = "28px";
+            textElement.style.background = "transparent";
+            textElement.style.padding = "5px";
+            textElement.style.border = "none";
+
+            dropArea.appendChild(textElement);
+            makeDraggableText(textElement);
+            textElement.addEventListener("click", () => selectText(textElement));
+            textData.set(textElement, { size: "28" });
+            textInput.value = "";
+            selectText(textElement);
+            dropAreaMessage.style.display = "none";
+        }
+
+        function makeDraggableText(element) {
+            let offsetX, offsetY, isDragging = false;
+
+            element.addEventListener("mousedown", (e) => {
+                isDragging = true;
+                const rect = element.getBoundingClientRect();
+                offsetX = e.clientX - rect.left;
+                offsetY = e.clientY - rect.top;
+                element.style.cursor = "grabbing";
+                document.body.style.userSelect = "none";
+            });
+
+            document.addEventListener("mousemove", (e) => {
+                if (!isDragging) return;
+                const dropRect = dropArea.getBoundingClientRect();
+                let newX = e.clientX - offsetX - dropRect.left;
+                let newY = e.clientY - offsetY - dropRect.top;
+                element.style.left = `${newX}px`;
+                element.style.top = `${newY}px`;
+                textXInput.value = newX;
+                textYInput.value = newY;
+            });
+
+            document.addEventListener("mouseup", () => {
+                isDragging = false;
+                element.style.cursor = "grab";
+                document.body.style.userSelect = "";
+            });
+        }
+
+        function makeDraggable(element) {
+            let offsetX, offsetY, isDragging = false;
+            element.addEventListener("mousedown", (e) => {
+                isDragging = true;
+                const rect = element.getBoundingClientRect();
+                offsetX = e.clientX - rect.left;
+                offsetY = e.clientY - rect.top;
+                element.style.cursor = "grabbing";
+                document.body.style.userSelect = "none";
+                e.preventDefault();
+            });
+
+            document.addEventListener("mousemove", (e) => {
+                if (!isDragging) return;
+                const dropRect = dropArea.getBoundingClientRect();
+                let newX = e.clientX - offsetX - dropRect.left;
+                let newY = e.clientY - offsetY - dropRect.top;
+                element.style.left = `${newX}px`;
+                element.style.top = `${newY}px`;
+                imgXInput.value = newX;
+                imgYInput.value = newY;
+            });
+
+            document.addEventListener("mouseup", () => {
+                isDragging = false;
+                element.style.cursor = "grab";
+                document.body.style.userSelect = "";
+            });
+        }
+
+        function selectImage(container, img) {
+            currentContainer = container;
+            updateInfo(img);
+        }
+
+        function selectText(element) {
+            currentTextElement = element;
+            textXInput.value = parseInt(element.style.left);
+            textYInput.value = parseInt(element.style.top);
+            textSizeInput.value = textData.get(element).size;
+            selectedText.value = element.textContent;
+            selectedText.removeAttribute('readonly');
+            selectedText.addEventListener('input', updateSelectedText);
+        }
+
+        function updateSelectedText() {
+            if (currentTextElement) {
+                currentTextElement.textContent = selectedText.value;
+            }
+        }
+        function updateInfo(img) {
+            const data = imageData.get(img);
+            if (!data) return;
+            imgFilename.textContent = data.filename;
+            imgXInput.value = parseInt(currentContainer.style.left);
+            imgYInput.value = parseInt(currentContainer.style.top);
+            imgScaleInput.value = data.scale;
+            imgOpacityInput.value = data.opacity;
+        }
+
+        function updateImageProperties() {
+            if (!currentContainer) return;
+            currentContainer.style.left = `${imgXInput.value}px`;
+            currentContainer.style.top = `${imgYInput.value}px`;
+            const img = currentContainer.querySelector("img");
+            const data = imageData.get(img);
+            if (!data) return;
+            const scale = imgScaleInput.value / 100;
+            img.style.width = `${data.width * scale}px`;
+            img.style.height = `${data.height * scale}px`;
+            data.scale = imgScaleInput.value;
+            const opacity = imgOpacityInput.value / 100;
+            img.style.opacity = opacity;
+            data.opacity = imgOpacityInput.value;
+        }
+
+        function updateTextProperties() {
+            if (!currentTextElement) return;
+            currentTextElement.style.left = `${textXInput.value}px`;
+            currentTextElement.style.top = `${textYInput.value}px`;
+            currentTextElement.style.fontSize = `${textSizeInput.value}px`;
+            textData.get(currentTextElement).size = textSizeInput.value;
+
+        }
+
+        function updateDropAreaSize() {
+            dropArea.style.width = `${areaWidthInput.value}px`;
+            dropArea.style.height = `${areaHeightInput.value}px`;
+        }
+
+        function deleteImage() {
+            if (!currentContainer) return;
+            const img = currentContainer.querySelector("img");
+            if (img) {
+                imageData.delete(img);
+            }
+            currentContainer.remove();
+            currentContainer = null;
+            imgFilename.textContent = "";
+            imgXInput.value = "";
+            imgYInput.value = "";
+            imgScaleInput.value = "";
+            imgOpacityInput.value = "";
+
+            if (dropArea.children.length === 1) {
+                dropAreaMessage.style.display = "block";
+            }
+        }
+
+        function deleteText() {
+            if (!currentTextElement) return;
+            textData.delete(currentTextElement);
+            currentTextElement.remove();
+            currentTextElement = null;
+            selectedText.textContent = "";
+            textXInput.value = "";
+            textYInput.value = "";
+            textSizeInput.value = "";
+            selectedText.value = "";
+
+            if (dropArea.children.length === 1) {
+                dropAreaMessage.style.display = "block";
+            }
+        }
+
+        document.getElementById('commonEventsFile').addEventListener('change', function (event) {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!isValidCommonEventsJson(data)) throw new Error("形式不正");
+                    commonEvents = data;
+                    populateCommonEventSelector();
+                    document.getElementById("exportButton").disabled = false; // 出力許可
+                } catch (err) {
+                    alert("正しいCommonEvents.jsonファイルではありません");
+                    const selector = document.getElementById('commonEventSelector');
+                    selector.innerHTML = "";
+                    document.getElementById("exportButton").disabled = true; // 出力無効
+                }
+            };
+            reader.readAsText(file);
+        });
+
+        function isValidCommonEventsJson(data) {
+            return Array.isArray(data) && data
+                .filter(item => item !== null)
+                .every(item =>
+                    item &&
+                    typeof item === 'object' &&
+                    typeof item.name === 'string' &&
+                    Array.isArray(item.list)
+                );
+        }
+
+        function populateCommonEventSelector() {
+            const selector = document.getElementById('commonEventSelector');
+            selector.innerHTML = "";
+            commonEvents
+                .filter(ev => ev !== null)
+                .forEach((ev, index) => {
+                    const option = document.createElement('option');
+                    option.value = index + 1;
+                    option.text = ev.name || `イベント${index + 1}`;
+                    selector.appendChild(option);
+                });
+            selector.addEventListener('change', handleEventSelect);
+        }
+
+        function handleEventSelect(event) {
+            const index = parseInt(event.target.value, 10);
+            const selectedEvent = commonEvents[index];
+            if (selectedEvent) {
+                // GUI表示処理（command list の再構成など）
+            }
+        }
+
+        function exportModifiedJson() {
+            const index = parseInt(document.getElementById('commonEventSelector').value, 10);
+            if (!isNaN(index)) {
+                commonEvents[index] = exportToJson(index); // 編集内容を反映
+            }
+            const blob = new Blob([JSON.stringify(commonEvents, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "CommonEvents.json";
+            a.click();
+        }
+
+        function exportToJson(index) {
+            const templateObj = { code: 355, indent: 0, parameters: ["CBR-エロステータス"] };
+            const objects = [];
+            dropArea.querySelectorAll('.draggable, .draggableText').forEach(element => {
+                if (element.type === "image") {
+                    objects.push(templateObj);
+                    const objImage1 = { code: 655, indent: 0, parameters: ["画像-" + imageData.get(element.querySelector('img')).filename] };
+                    objects.push(objImage1);
+                    const objImage2 = { code: 655, indent: 0, parameters: ["x-" + parseInt(element.style.left)] };
+                    objects.push(objImage2);
+                    const objImage3 = { code: 655, indent: 0, parameters: ["y-" + parseInt(element.style.top)] };
+                    objects.push(objImage3);
+                    const objImage4 = { code: 655, indent: 0, parameters: ["透明度-" + imageData.get(element.querySelector('img')).opacity] };
+                    objects.push(objImage4);
+                    const objImage5 = { code: 655, indent: 0, parameters: ["サイズ-" + imageData.get(element.querySelector('img')).scale] };
+                    objects.push(objImage5);
+                } else if (element.type === "text") {
+                    objects.push(templateObj);
+                    const objText1 = { code: 655, indent: 0, parameters: ["テキスト-" + element.textContent] };
+                    objects.push(objText1);
+                    const objText2 = { code: 655, indent: 0, parameters: ["x-" + parseInt(element.style.left)] };
+                    objects.push(objText2);
+                    const objText3 = { code: 655, indent: 0, parameters: ["y-" + parseInt(element.style.top)] };
+                    objects.push(objText3);
+                    const objText4 = { code: 655, indent: 0, parameters: ["左右-左"] };
+                    objects.push(objText4);
+                    const objText5 = { code: 655, indent: 0, parameters: ["上下-上"] };
+                    objects.push(objText5);
+                    const objText6 = { code: 655, indent: 0, parameters: ["サイズ-" + parseInt(element.style.fontSize)] };
+                    objects.push(objText6);
+                }
+            });
+            objects.push({ code: 0, indent: 0, parameters: [] });
+            const obj = {
+                id: index,
+                list: objects,
+                name: "",
+                switchId: 1,
+                trigger: 0
+            };
+            return obj;
+        }
+
+    </script>
+</body>
+
+</html>
