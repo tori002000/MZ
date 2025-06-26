@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="script-src 'self' 'unsafe-inline' 'unsafe-eval';">
+
+  <title>Project18</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #f0f0f0;
+      padding: 2em;
+    }
+
+    ul {
+      list-style: none;
+      padding: 0;
+      width: 400px;
+    }
+
+    li {
+      background: white;
+      margin: 1px 0;
+      padding: 4px 12px;
+      border: 1px solid #ccc;
+      cursor: move;
+      display: flex;
+      gap: 8px;
+
+    }
+
+    .moved {
+      background-color: #fff4cc;
+      border-left: 4px solid #ff9900;
+    }
+
+    .dragging {
+      background-color: #d0e6ff !important;
+      border-left: 4px solid #3399ff !important;
+      opacity: 0.8;
+    }
+
+    .index {
+      width: 2em;
+      text-align: right;
+      color: #666;
+    }
+
+    .label {
+      flex-grow: 1;
+    }
+
+    #applyChanges {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    #applyChanges:hover {
+      background-color: #005fa3;
+    }
+
+    #fixedControls {
+      position: fixed;
+      bottom: 60px;
+      right: 20px;
+      background: rgba(240, 240, 240, 0.95);
+      padding: 5px 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    #fixedControls label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #fixedControls button {
+      font-size: 16px;
+      padding: 6px 12px;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #fixedControls button:hover {
+      background-color: #005fa3;
+    }
+
+    #resetList {
+      position: fixed;
+      bottom: 160px;
+      right: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 1000;
+    }
+
+    #resetList:hover {
+      background-color: #005fa3;
+    }
+
+    #listControls {
+      position: fixed;
+      bottom: 200px;
+      right: 20px;
+      background: rgba(240, 240, 240, 0.95);
+      padding: 5px 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      z-index: 000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    #listControls label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #listControls button {
+      font-size: 16px;
+      padding: 6px 12px;
+      background-color: #007acc;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    #listControls button:hover {
+      background-color: #005fa3;
+    }
+
+    #readme {
+      position: fixed;
+      bottom: 400px;
+      right: 20px;
+      background: rgba(240, 240, 240, 0.95);
+      padding: 5px 15px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      z-index: 000;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+
+
+
+  <div id="instruction" style="display: none;">
+    <h1>変数ID書き換えツール</h1>
+    <p>
+      このツールは RPGツクールMZ のゲームフォルダ内で実行する必要があります。<br>
+      最初にプロジェクト内のindex.htmlを退避させてください。<br>
+      このツールのファイル名をindex.html にリネームし、退避前の場所に置きます。<br>
+      その状態でゲームを起動してください。<br><br>
+
+    </p>
+  </div>
+  <div id="toolUI" style="display: none;">
+    <h1>変数並び替えツール</h1>
+    <ul id="variableList"></ul>
+    <div id="readme">
+      <label>
+        試験段階のため絶対にバックアップを取り、<br>
+        破損してもいいデータでお試しください<br>
+        プラグインコマンドやプラグインで読み込む<br>
+        タグなどは対応できません。<br>
+        <br>
+        不具合が発生した場合復元は非常に困難です。<br>
+        使用の責任は自身が負うものとして<br>
+        慎重にご利用ください。
+      </label>
+    </div>
+    <div id="listControls">
+      <div id="manualSwapBox" style="display: flex; gap: 4px; flex-wrap: wrap;">
+        <input type="number" id="swapId1" placeholder="ID1" style="width: 60px;">
+        <input type="number" id="swapId2" placeholder="ID2" style="width: 60px;">
+        <button id="swapById">IDで入れ替え</button>
+      </div>
+      <br>
+      <fieldset id="moveMode" style="border:none; padding:0; margin:0;">
+        <label><input type="radio" name="moveMode" value="swap" checked> 入れ替え</label>
+        <!-- <label><input type="radio" name="moveMode" value="shift"> 移動</label> -->
+      </fieldset>
+      <label>
+        <input type="checkbox" id="enableHighlightMoved" checked>
+        移動している変数に色を付ける
+      </label>
+      <button id="resetList">リストをリセット</button>
+    </div>
+
+    <br>
+    <div id="fixedControls">
+      <label>
+        <input type="checkbox" id="enableScriptReplace" checked>
+        スクリプト内も書き換える
+      </label>
+      <label>
+        <input type="checkbox" id="enableEscapeReplace" checked>
+        \v[n] も書き換える
+      </label>
+      <button id="applyChanges">書き換えを実行</button>
+    </div>
+  </div>
+  <script>
+
+    window.addEventListener('DOMContentLoaded', () => {
+      const isNW = typeof require === 'function' &&
+        typeof process !== 'undefined' &&
+        process.versions?.node;
+
+      const toolUI = document.getElementById('toolUI');
+      const instruction = document.getElementById('instruction');
+
+      if (isNW) {
+        toolUI.style.display = 'block';
+        // ここに本体初期化処理（System.json 読み込みなど）を記述
+        initTool();
+      } else {
+        instruction.style.display = 'block';
+      }
+    });
+    async function initTool() {
+      // System.json 読み込み、変数リスト生成などをここにまとめる
+      const list = document.getElementById('variableList');
+      const enableScript = document.getElementById('enableScriptReplace')?.checked;
+      const enableEscape = document.getElementById('enableEscapeReplace').checked;
+      const system = await fetch('data/System.json').then(r => r.json());
+      const vars = system.variables.map((name, id) => ({ id, name })).slice(1);
+      vars.forEach(v => list.appendChild(createItem(v)));
+      updateIndexes(list);
+      setupDragAndDrop(list);
+
+
+      document.getElementById('applyChanges').addEventListener('click', onApply);
+      document.getElementById('resetList').addEventListener('click', () => {
+        const list = document.getElementById('variableList');
+        const items = Array.from(list.children);
+
+        // dataset.id に基づき元のID順にソート
+        items.sort((a, b) => {
+          const idA = parseInt(a.dataset.id);
+          const idB = parseInt(b.dataset.id);
+          return idA - idB;
+        });
+
+        // 並び直し
+        items.forEach(item => list.appendChild(item));
+
+        // 番号と色を更新
+        updateIndexes(list);
+      });
+      document.getElementById('swapById').addEventListener('click', () => {
+        const id1 = parseInt(document.getElementById('swapId1').value);
+        const id2 = parseInt(document.getElementById('swapId2').value);
+
+        if (isNaN(id1) || isNaN(id2) || id1 === id2) {
+          alert('異なる2つの変数IDを入力してください。');
+          return;
+        }
+
+        const list = document.getElementById('variableList');
+        const items = Array.from(list.children);
+
+        const item1 = items.find(li => parseInt(li.dataset.id) === id1);
+        const item2 = items.find(li => parseInt(li.dataset.id) === id2);
+
+        if (!item1 || !item2) {
+          alert('入力されたIDに対応する変数が見つかりません。');
+          return;
+        }
+
+        // 位置情報を取得
+        const next1 = item1.nextSibling;
+        const next2 = item2.nextSibling;
+
+        if (next1 === item2) {
+          list.insertBefore(item2, item1);
+        } else if (next2 === item1) {
+          list.insertBefore(item1, item2);
+        } else {
+          list.insertBefore(item1, next2);
+          list.insertBefore(item2, next1);
+        }
+
+        updateIndexes(list);
+      });
+      document.getElementById('enableHighlightMoved').addEventListener('change', () => {
+        const list = document.getElementById('variableList');
+        updateIndexes(list);
+      });
+
+      function createItem(v) {
+        const li = document.createElement('li');
+        li.draggable = true;
+        li.dataset.id = v.id;
+        li.innerHTML = `<span class="index">?</span><span class="label">${v.id}: ${v.name || ''}</span>`;
+        return li;
+      }
+
+      function updateIndexes(list) {
+        const highlightMoved = document.getElementById('enableHighlightMoved')?.checked;
+        const items = list.querySelectorAll('li');
+
+        items.forEach((li, i) => {
+          const indexSpan = li.querySelector('.index');
+          indexSpan.textContent = (i + 1) + '.';
+
+          const originalId = parseInt(li.dataset.id);
+          const isMoved = originalId !== i + 1;
+
+          if (highlightMoved && isMoved) {
+            li.classList.add('moved');
+          } else {
+            li.classList.remove('moved');
+          }
+        });
+      }
+
+      function setupDragAndDrop(list) {
+        let draggedItem = null;
+        let draggedIndex = null;
+        let lastSwapIndex = null;
+
+        list.addEventListener('dragstart', e => {
+          draggedItem = e.target;
+          draggedIndex = Array.from(list.children).indexOf(draggedItem);
+          lastSwapIndex = null;
+          draggedItem.classList.add('dragging');
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        list.addEventListener('dragover', e => {
+          e.preventDefault();
+          const target = e.target.closest('li');
+          if (!target || target === draggedItem) return;
+
+          const moveMode = document.querySelector('input[name="moveMode"]:checked')?.value;
+          const items = Array.from(list.children);
+          const targetIndex = items.indexOf(target);
+
+          if (moveMode === 'swap') {
+            if (targetIndex === -1) return;
+            const insertPosIndex = (lastSwapIndex <= draggedIndex) ? 0 : 1;
+            // 元に戻す
+            if (lastSwapIndex !== null && lastSwapIndex !== draggedIndex) {
+              const originalItem = list.children[lastSwapIndex];
+              const currentItem = list.children[draggedIndex];
+              list.insertBefore(originalItem, currentItem);
+              list.insertBefore(currentItem, list.children[lastSwapIndex + insertPosIndex] || null);
+
+            }
+
+            // 入れ替え
+            const currentItem = list.children[draggedIndex];
+            const swapItem = list.children[targetIndex];
+            list.insertBefore(swapItem, currentItem);
+            list.insertBefore(currentItem, list.children[targetIndex + insertPosIndex] || null);
+
+            lastSwapIndex = targetIndex;
+          }
+
+
+          if (moveMode === 'shift') {
+            const rect = target.getBoundingClientRect();
+            const after = (e.clientY - rect.top) > rect.height / 2;
+            list.insertBefore(draggedItem, after ? target.nextSibling : target);
+          }
+          updateIndexes(list);
+        });
+
+        list.addEventListener('drop', () => {
+          if (draggedItem) {
+            draggedItem.classList.remove('dragging');
+            draggedItem = null;
+            draggedIndex = null;
+            lastSwapIndex = null;
+          }
+          updateIndexes(list);
+        });
+
+        list.addEventListener('dragend', () => {
+          if (draggedItem) {
+            draggedItem.classList.remove('dragging');
+            draggedItem = null;
+            draggedIndex = null;
+            lastSwapIndex = null;
+          }
+        });
+      }
+
+      async function onApply() {
+        const fs = require('fs');
+        const path = require('path');
+
+        const base = path.dirname(process.mainModule.filename);
+
+        const dataDir = path.join(base, 'data');
+        const backupDir = path.join(base, 'var_backup');
+        if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir);
+
+        // 1. マップファイルの収集
+        const mapFiles = [];
+        for (let i = 1; ; i++) {
+          const name = `Map${String(i).padStart(3, '0')}.json`;
+          const full = path.join(dataDir, name);
+          if (!fs.existsSync(full)) break;
+          mapFiles.push(name);
+        }
+
+        const filesToEdit = {
+          map: mapFiles,
+          commands: ['CommonEvents.json', 'Troops.json'],
+          formula: ['Items.json', 'Skills.json'],
+          system: ['System.json'],
+          escape: [
+            ...mapFiles,
+            'CommonEvents.json', 'Troops.json',
+            'Items.json', 'Skills.json',
+            'System.json',
+            'Actors.json', 'Animations.json', 'Armors.json',
+            'Classes.json', 'Enemies.json', 'States.json',
+            'Tilesets.json', 'Weapons.json'
+          ]
+        };
+
+        const mapping = buildVariableIdMap(); // 並べ替えた新旧IDマップを生成
+        const loaded = {};
+
+        try {
+          // 2. マップイベント出現条件・コマンド書き換え
+          for (const file of filesToEdit.map) {
+            const json = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf-8'));
+            replaceEventConditionsVariables(json, mapping);
+            for (const ev of json.events) {
+              if (!ev) continue;
+              for (const page of ev.pages) {
+                replaceVariableIdsInCommands(page.list, mapping);
+                // 移動ルート（page.moveRoute）にも code:45 がある場合の処理
+                if (page.moveRoute && enableScript) {
+                  replaceVariableIdInMoveRoute(page.moveRoute, mapping);
+                }
+              }
+            }
+            loaded[file] = json;
+          }
+
+          // 3. コモン・敵グループ
+          for (const file of filesToEdit.commands) {
+            const json = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf-8'));
+            if (file === 'CommonEvents.json') {
+              for (const ev of json) {
+                if (ev?.list) replaceVariableIdsInCommands(ev.list, mapping);
+              }
+            } else if (file === 'Troops.json') {
+              for (const troop of json) {
+                if (troop) {
+                  for (const page of troop.pages || []) {
+                    replaceVariableIdsInCommands(page.list, mapping);
+                  }
+                }
+              }
+            }
+            loaded[file] = json;
+          }
+
+          // 4. 計算式 v[n] 書き換え
+          for (const file of filesToEdit.formula) {
+            const json = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf-8'));
+            replaceVariableInDamageFormula(json, mapping);
+            loaded[file] = json;
+          }
+
+          // 5. System.json 変数情報の並び替え
+          {
+            const file = 'System.json';
+            const system = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf-8'));
+            const vars = system.variables;
+            system.variables = [null].concat(
+              getVariableListInOrder().map(id => vars[id] || '')
+            );
+            loaded[file] = system;
+          }
+
+          // 6. \v[n] の置換（チェックボックスがオンの場合）
+          if (enableEscape) {
+            for (const file of filesToEdit.escape) {
+              if (!loaded[file]) {
+                loaded[file] = JSON.parse(fs.readFileSync(path.join(dataDir, file), 'utf-8'));
+              }
+              replaceEscapeVariableStrings(loaded[file], mapping);
+            }
+          }
+
+          const confirmed = window.confirm('変数IDの書き換えを実行します。\nこの操作はバックアップが作成し、プロジェクトのデータを変更します。\n続行してよろしいですか？');
+          if (!confirmed) return;
+          // 7. ファイル保存（バックアップ＋上書き）
+          for (const [file, json] of Object.entries(loaded)) {
+            const fullPath = path.join(dataDir, file);
+            const backupPath = path.join(backupDir, file);
+            fs.copyFileSync(fullPath, backupPath);
+            fs.writeFileSync(fullPath, JSON.stringify(json, null, 2), 'utf-8');
+          }
+
+          alert('すべての変数ID書き換えが完了しました。バックアップは var_backup に保存されました。');
+          reloadVariableList();
+
+        } catch (e) {
+          console.error('処理中にエラーが発生しました:', e);
+          alert('エラーが発生しました。詳細はコンソールをご確認ください。');
+        }
+      }
+
+      function buildVariableIdMap() {
+        const list = document.getElementById('variableList');
+        const newOrder = Array.from(list.children).map(li => parseInt(li.dataset.id));
+        const map = {};
+        newOrder.forEach((oldId, newIndex) => map[oldId] = newIndex + 1);
+        return map;
+      }
+
+      function getVariableListInOrder() {
+        const list = document.getElementById('variableList');
+        return Array.from(list.children).map(li => parseInt(li.dataset.id));
+      }
+
+      //マップイベントの出現条件に使われる変数の書き換え
+      function replaceEventConditionsVariables(json, mapping) {
+        if (!json.events) return;
+        for (const ev of json.events) {
+          if (!ev || !ev.pages) continue;
+          for (const page of ev.pages) {
+            const cond = page.conditions;
+            if (cond && cond.variableValid && cond.variableId in mapping) {
+              cond.variableId = mapping[cond.variableId];
+            }
+          }
+        }
+      }
+
+      async function replaceVariableCommandsInDataFile(fileName, mapping) {
+        const json = await fetch(`data/${fileName}`).then(r => r.json());
+
+        if (fileName === 'CommonEvents.json') {
+          for (const entry of json) {
+            if (entry && entry.list) {
+              replaceVariableIdsInCommands(entry.list, mapping);
+            }
+          }
+        } else if (fileName === 'Troops.json') {
+          for (const entry of json) {
+            if (entry && entry.pages) {
+              for (const page of entry.pages) {
+                if (page.list) {
+                  replaceVariableIdsInCommands(page.list, mapping);
+                }
+              }
+            }
+          }
+        } else if (/^Map\d+\.json$/.test(fileName)) {
+          for (const event of json.events) {
+            if (!event) continue;
+            for (const page of event.pages) {
+
+              replaceEventConditionsVariables(json, mapping); // 出現条件
+              replaceVariableIdsInCommands(page.list, mapping);
+            }
+          }
+        }
+
+        await saveJSON(`data/${fileName}`, json);
+      }
+
+      //イベントコマンドで使用される変数の書き換え
+      function replaceVariableIdsInCommands(commands, mapping) {
+        for (const cmd of commands) {
+          const p = cmd.parameters;
+
+          switch (cmd.code) {
+            case 103: case 104:
+              if (p[0] in mapping) p[0] = mapping[p[0]];
+              break;
+
+            case 111:
+              if (p[0] && p[1] in mapping) {
+                p[1] = mapping[p[1]];
+                if (p[2] && p[3] in mapping) {
+                  p[3] = mapping[p[3]];
+                }
+              }
+              break;
+
+            case 122:
+              if (p[0] === p[1]) {
+                if (p[0] in mapping) {
+                  p[0] = mapping[p[0]];
+                  p[1] = p[0];
+                }
+              }
+              if (p[3] && p[4] in mapping) {
+                p[4] = mapping[p[4]];
+              }
+              break;
+
+            case 125:
+              if (p[1] && p[2] in mapping) {
+                p[2] = mapping[p[2]];
+              }
+              break;
+
+            case 126: case 127: case 128: case 331: case 332: case 342:
+              if (p[2] && p[3] in mapping) {
+                p[3] = mapping[p[3]];
+              }
+              break;
+
+            case 201:
+              if (p[0]) {
+                for (let i = 1; i <= 3; i++) {
+                  if (p[i] in mapping) p[i] = mapping[p[i]];
+                }
+              }
+              break;
+
+            case 202:
+              if (p[1]) {
+                for (let i = 2; i <= 4; i++) {
+                  if (p[i] in mapping) p[i] = mapping[p[i]];
+                }
+              }
+              break;
+
+            case 203:
+              if (p[1]) {
+                for (let i = 2; i <= 3; i++) {
+                  if (p[i] in mapping) p[i] = mapping[p[i]];
+                }
+              }
+              break;
+            case 231: case 232:
+              if (p[3]) {
+                if (p[4] in mapping) p[4] = mapping[p[4]];
+                if (p[5] in mapping) p[5] = mapping[p[5]];
+              }
+              break;
+
+            case 285:
+              if (p[0] in mapping) p[0] = mapping[p[0]];
+              if (p[2]) {
+                if (p[3] in mapping) p[3] = mapping[p[3]];
+                if (p[4] in mapping) p[4] = mapping[p[4]];
+              }
+              break;
+
+            case 301: case 318:
+              if (p[0] === 1 && p[1] in mapping) {
+                p[1] = mapping[p[1]];
+              }
+              break;
+
+            case 311: case 312: case 326: case 315: case 316:
+              if (p[0] && p[1] in mapping) {
+                p[1] = mapping[p[1]];
+              }
+              if (p[3] && p[4] in mapping) {
+                p[4] = mapping[p[4]];
+              }
+              break;
+
+            case 317:
+              if (p[0] && p[1] in mapping) {
+                p[1] = mapping[p[1]];
+              }
+              if (p[4] && p[5] in mapping) {
+                p[5] = mapping[p[5]];
+              }
+              break;
+
+            case 505: // スクリプトコマンド
+              if (enableScript && typeof p[0] === 'string') {
+                p[0] = replaceVariableIdInScript(p[0], mapping);
+              }
+              break;
+
+            case 355: // 移動ルートの設定
+              if (enableScript && p[0] && typeof p[0] === 'object' && Array.isArray(p[0].list)) {
+                replaceVariableIdInMoveRoute(p[0], mapping);
+              }
+              break;
+          }
+        }
+      }
+
+      function replaceVariableIdInScript(script, mapping) {
+        return script.replace(/\$gameVariables\.(value|setValue)\((\d+)/g, (match, method, idStr) => {
+          const id = Number(idStr);
+          return (id in mapping) ? `$gameVariables.${method}(${mapping[id]}` : match;
+        });
+      }
+      function replaceVariableIdInMoveRoute(route, mapping) {
+        for (const cmd of route.list || []) {
+          if (cmd.code === 45 && typeof cmd.parameters[0] === 'string') {
+            cmd.parameters[0] = replaceVariableIdInScript(cmd.parameters[0], mapping);
+          }
+        }
+      }
+      //ダメージ計算式の変数の書き換え
+      function replaceVariableInDamageFormula(obj, mapping) {
+        if (!obj) return;
+        for (const entry of obj) {
+          if (entry && entry.damage && typeof entry.damage.formula === 'string') {
+            entry.damage.formula = entry.damage.formula.replace(/\bv\[(\d+)\]/g, (match, id) => {
+              const num = Number(id);
+              return (num in mapping) ? `v[${mapping[num]}]` : match;
+            });
+          }
+        }
+      }
+      // \v[n]の書き換え
+      function replaceEscapeVariableStrings(obj, mapping) {
+        if (Array.isArray(obj)) {
+          for (let i = 0; i < obj.length; i++) {
+            const el = obj[i];
+            if (typeof el === 'string') {
+              obj[i] = el.replace(/\\v\[(\d+)\]/g, (match, id) => {
+                const num = Number(id);
+                return (num in mapping) ? `\\v[${mapping[num]}]` : match;
+              });
+            } else {
+              replaceEscapeVariableStrings(el, mapping);
+            }
+          }
+        } else if (obj && typeof obj === 'object') {
+          for (const key in obj) {
+            const val = obj[key];
+            if (typeof val === 'string') {
+              obj[key] = val.replace(/\\v\[(\d+)\]/g, (match, id) => {
+                const num = Number(id);
+                return (num in mapping) ? `\\v[${mapping[num]}]` : match;
+              });
+            } else {
+              replaceEscapeVariableStrings(val, mapping);
+            }
+          }
+        }
+      }
+
+
+      async function saveJSON(path, data) {
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = path;
+        a.click();
+      }
+      function reloadVariableList() {
+        const fs = require('fs');
+        const path = require('path');
+        const dataDir = path.join(process.cwd(), 'data');
+        const list = document.getElementById('variableList');
+        list.innerHTML = '';
+
+        const system = JSON.parse(fs.readFileSync(path.join(dataDir, 'System.json'), 'utf-8'));
+        const vars = system.variables.map((name, id) => ({ id, name })).slice(1); // ID 1〜
+
+        vars.forEach(v => list.appendChild(createItem(v)));
+        updateIndexes(list);
+        setupDragAndDrop(list);
+      }
+    };
+  </script>
+</body>
+
+</html>
