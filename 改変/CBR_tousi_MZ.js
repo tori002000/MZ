@@ -12,7 +12,7 @@
 * @author COBRA　改変：「」
 * @help --------------------------------------
 * MZ用改変 V1
-* CBR_tousi_MZmod.js
+* CBR_tousi_MZ.js
 * 公式プラグインPluginCommonBase.jsをベースにしているので
 * PluginCommonBase.jsと一緒に導入し、このプラグインを下部に配置
 * 覗き穴画像はimg/pictureに保存してください
