@@ -13,6 +13,8 @@
 - **概要**: タッチUIボタンの位置を変更するプラグイン
 - **機能**:  
     - タッチUI ON時に表示されるキャンセルボタンの表示位置を変更します。
+- **画像**:
+    - <img src="../manual/CustomTouchUI_01.png" alt="CustomTouchUI_01" width="300"> → <img src="../manual/CustomTouchUI_02.png" alt="CustomTouchUI_02" width="300">
 
 ##
 ### [DisableImageDecryption.js](./DisableImageDecryption.js)
