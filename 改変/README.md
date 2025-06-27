@@ -22,7 +22,7 @@
     - オリジナルのプラグインと一緒に導入するプラグイン
 
 ##
-### [CBR_tousi_MZmod.js](./CBR_tousi_MZmod.js)
+### [CBR_tousi_MZ.js](./CBR_tousi_MZ.js)
 - **オリジナル**:
     - 下着が見えるプラグイン (http://cobrara.blogspot.jp/)
     - KOBRA 様
