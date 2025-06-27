@@ -30,7 +30,7 @@
     - プラグインコマンドを追加
 
 ##
-### [HR_PictureMask_MultiMod.js](./HR_PictureMask_MultiMod.js)
+### [HR_PictureMask_Multi.js](./HR_PictureMask_Multi.js)
 - **オリジナル**:
     - ピクチャマスクプラグイン (https://note.com/haranta/n/n01e393a40f53)
     - はら 様
