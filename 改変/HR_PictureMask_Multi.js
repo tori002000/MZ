@@ -5,7 +5,7 @@
  * @url 
  *
  * @help
- * HR_PictureMask_MultiMod.js
+ * HR_PictureMask_Multi.js
  * はら様のピクチャマスクプラグインを、
  * 複数のマスク範囲を登録できるように改変したもの
  * マスク範囲の合成に使う合成方法のパラメータを追加
@@ -99,7 +99,7 @@
 
     // ----------------プラグインコマンド----------------
 
-    const pluginName = "HR_PictureMask_MultiMod";
+    const pluginName = "HR_PictureMask_Multi";
 
     PluginManager.registerCommand(pluginName, "SET_MASK", args => {
         const numberArray = JSON.parse(args.maskId).map(Number);
