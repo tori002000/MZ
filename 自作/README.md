@@ -41,7 +41,9 @@
 - **機能**:  
     - 行内の文字にサイズ差がある場合の縦方向揃えを変更します。
     - 制御文字を書き込むことで同じ行内でも揃え方向を変更できます。
-  <img src="./manual/VerticalAlignControl_01.png" alt="VerticalAlignControl_01" width="300">
+
+<br>
+    <img src="../manual/VerticalAlignControl_01.png" alt="VerticalAlignControl_01" width="300">
 
 ##
 ### [hidariue5.js](./hidariue5.js)
