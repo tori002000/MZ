@@ -10,6 +10,7 @@
 /*:
 * @plugindesc 下着が見えるプラグイン　MZ改変
 * @author COBRA　改変：「」
+* @target MZ
 * @help --------------------------------------
 * MZ用改変 V1
 * CBR_tousi_MZ.js
