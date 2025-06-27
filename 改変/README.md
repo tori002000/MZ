@@ -21,7 +21,7 @@
     - プラグインコマンドを追加
     - オリジナルのプラグインと一緒に導入するプラグイン
 
----
+##
 ### [CBR_tousi_MZmod.js](./CBR_tousi_MZmod.js)
 - **オリジナル**:
     - 下着が見えるプラグイン
@@ -29,7 +29,7 @@
 - **改変内容**:  
     - プラグインコマンドを追加
 
----
+##
 ### [HR_PictureMask_MultiMod.js](./HR_PictureMask_MultiMod.js)
 - **オリジナル**:
     - ピクチャマスクプラグイン
@@ -37,7 +37,7 @@
 - **改変内容**:  
     - 1枚のピクチャに対し複数のマスク範囲を登録できるように
 
----
+##
 ### [KMS_MapActiveMessageMZ.js](./KMS_MapActiveMessageMZ.js)
 - **オリジナル**:
     - アクティブメッセージ
