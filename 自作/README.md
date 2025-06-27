@@ -4,8 +4,7 @@
 ## プラグイン一覧
 
 ### [AutoEquipScoring.js](./AutoEquipScoring.js)
-- **概要**: 最強装備の評価ポイント操作プラグイン
-- **機能**:  
+- 最強装備の評価ポイント操作プラグイン 
     - 最強装備の際に選ばれる基準になる評価ポイントを装備ごとに設定することで優先度を操作します。
 
 ### [CustomTouchUI.js](./CustomTouchUI.js)
