@@ -880,7 +880,16 @@ var SNSBackgroundOpacity=0;
             const fontSize = userMessageFont.size || 20;
             const textColor = userMessageFont.color || "#000000";
             const textH = lineCount * (fontSize + 8);
-            this._width = Math.min(this._maxW, Math.max(...lines.map(s => s.length * fontSize)) + 40);
+            // 仮Bitmapで各行の実際の幅を計測
+            const tempBmp = new Bitmap(1, 1);
+            tempBmp.fontSize = fontSize;
+            tempBmp.textColor = textColor;
+            let maxLineWidth = 0;
+            for (let i = 0; i < lines.length; i++) {
+                const w = tempBmp.measureTextWidth(lines[i]);
+                if (w > maxLineWidth) maxLineWidth = w;
+            }
+            this._width = Math.min(this._maxW, Math.ceil(maxLineWidth) + 40);
             this._height = textH + 20 + nameHeight;
 
             // ウィンドウスキン画像の取得
