@@ -31,6 +31,8 @@
     - 上から下へメッセージスプライトを表示します。
 - **備考**:  
     - 公式プラグインPluginCommonBase.jsベース
+- **サンプル**:
+    - <img src="../manual/SNSMessenger_01.png" alt="SNSMessenger_01" width="300">
 
 ##
 ### [TileChange.js](./TileChange.js)
