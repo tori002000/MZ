@@ -447,7 +447,6 @@ var SNSBackgroundOpacity = 0;
     });
 
     PluginManagerEx.registerCommand(document.currentScript, "ClearSNSLog", args => {
-        // ユーザー情報も消すかどうかのフラグを追加
         const clearUsers = args && args.clearUsers === "true";
         if (clearUsers) {
             $gameSystem._users = {};
@@ -589,9 +588,7 @@ var SNSBackgroundOpacity = 0;
             this._bg.x = 0; this._bg.y = 0;
             this.addChild(this._bg);
             this._msgContainer = new Sprite();
-            // ▼▼ 追加：保存されたスクロール位置があれば復元 ▼▼
             this._msgContainer.y = (typeof st.scrollY === "number") ? st.scrollY : 10;
-            // ▲▲ 追加ここまで ▲▲
 
             // メッセージ部分にマスクを設定 
             const mask = new PIXI.Graphics();
@@ -681,7 +678,6 @@ var SNSBackgroundOpacity = 0;
             // ...高さ計算・スクロール調整は同じ...
             const totalH = this._msgContainer._contentHeight;
             const maxH = cfg.height - 20;
-            // ▼▼ 追加：保存されたスクロール位置があれば復元 ▼▼
             const config = $gameSystem.getSNSConfig();
             if (typeof config.scrollY === "number") {
                 this._msgContainer.y = config.scrollY;
@@ -693,7 +689,6 @@ var SNSBackgroundOpacity = 0;
                     this._msgContainer.y = 10;
                 }
             }
-            // ▲▲ 追加ここまで ▲▲
             this._loading = false;
         }
     }
@@ -811,13 +806,6 @@ var SNSBackgroundOpacity = 0;
             this._systemNotice = String(data[0]) === "-1"; // システム通知判定
             this._side = isSelf ? selfPosition : otherPosition;
             this.iconLoadPromise = this._createWindow();
-            // ▼▼ デバッグ用: 薄い色の背景を追加 ▼▼
-            const debugBg = new Bitmap(maxW * 0.7, 200); // 高さは仮
-            debugBg.fillRect(0, 0, debugBg.width, debugBg.height, "rgba(200,200,255,0.15)");
-            const debugBgSprite = new Sprite(debugBg);
-            debugBgSprite.z = -10;
-            this.addChildAt(debugBgSprite, 0);
-            // ▲▲ ここまで ▲▲
         }
         async _createWindow() {
             const type = this.data[1];
