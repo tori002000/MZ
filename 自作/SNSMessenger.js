@@ -296,6 +296,7 @@
  * ・ふきだしのしっぽ
  * ・なめらかなスクロール
  * ・コマンドやキー入力によるスクロール
+ * 
  */
 /*~struct~Font:
  * @param size
@@ -310,7 +311,7 @@
  * @type string
  * @default #ffffff
 */
-var SNSBackgroundOpacity=0;
+var SNSBackgroundOpacity = 0;
 (() => {
     const PLUGIN = "SNSMessenger";
     const params = PluginManager.parameters(PLUGIN);
@@ -318,14 +319,15 @@ var SNSBackgroundOpacity=0;
     const selfWindowSkin = params.selfWindowSkin || "Window";
     const otherWindowSkin = params.otherWindowSkin || "Window";
     const systemWindowSkin = params.systemWindowSkin || "Window";
-    const windowFrameMargin = Number(params.windowFrameMargin)||4;
-    const userMessageFont = parseFontParam(params.userMessageFont);
-    const userNameFont = parseFontParam(params.userNameFont);
-    const timestampFont = parseFontParam(params.timestampFont);
-    const systemMessageFont = parseFontParam(params.systemMessageFont);
+    const windowFrameMargin = Number(params.windowFrameMargin) || 4;
+    const userMessageFont = parseFontParam(params.userMessageFont) || { "size": 16, "color": "#000000" };
+    const userNameFont = parseFontParam(params.userNameFont) || { "size": 12, "color": "#FFFFFF" };
+    const timestampFont = parseFontParam(params.timestampFont) || { "size": 12, "color": "#FFFFFF" };
+    const systemMessageFont = parseFontParam(params.systemMessageFont) || { "size": 16, "color": "#FFFFFF" };
     const selfPosition = params.selfPosition || "right";
     const otherPosition = params.otherPosition || "left";
-    
+
+    const nameHeight = userNameFont.size + 6;
     const cfg = {
         width: +params.snsWidth,
         height: +params.snsHeight,
@@ -580,7 +582,7 @@ var SNSBackgroundOpacity=0;
             } else {
                 // 青で塗りつぶしたBitmapを作成
                 const bmp = new Bitmap(cfg.width, cfg.height);
-                bmp.fillRect(0, 0, cfg.width, cfg.height, "rgba(130,180,230,"+String(SNSBackgroundOpacity)+")");
+                bmp.fillRect(0, 0, cfg.width, cfg.height, "rgba(130,180,230," + String(SNSBackgroundOpacity) + ")");
                 this._bg = new Sprite(bmp);
             }
             this._bg.x = 0; this._bg.y = 0;
@@ -694,322 +696,46 @@ var SNSBackgroundOpacity=0;
             this._loading = false;
         }
     }
-
-    // メッセージウィンドウ（フキダシ）
-    class SNSMessageWindow extends Sprite {
-        constructor(user, data, isSelf, maxW) {
+    class SNSMessageWindowFrame extends Sprite {
+        constructor(skinBitmap, width, height) {
             super();
-            this.user = user; this.data = data;
-            this.isSelf = isSelf;
-            this._maxW = maxW * 0.7;
-            this._systemNotice = String(data[0]) === "-1"; // システム通知判定
-            this._side = isSelf ? selfPosition : otherPosition;
-            
-            this.iconLoadPromise = this._createWindow();
+            this.skinBitmap = skinBitmap;
+            this._width = width;
+            this._height = height;
+            this._createWindow_Frame();
         }
-        async _createWindow() {
-            const type = this.data[1];
-            // システム通知の場合
-            if (this._systemNotice) {
-                const txt = this.data[2];
-                const lines = txt.split('\n');
-                const fontSize = systemMessageFont.size || 18;
-                const fontColor = systemMessageFont.color || "#333";
-                const lineCount = lines.length;
-                const textH = lineCount * (fontSize + 8);
-                this._width = Math.min(this._maxW, Math.max(...lines.map(s => s.length * fontSize)) + 40);
-                this._height = textH + 20;
-
-                // システム通知用ウィンドウスキン
-                const skinBitmap = ImageManager.loadSystem(cfg.systemWindowSkin);
-
-                // 背景・枠
-                this._backSprite = new Sprite();
-                this._backTiling = new TilingSprite();
-                this._backSprite.addChild(this._backTiling);
-                this.addChild(this._backSprite);
-
-                this._frameSprite = new Sprite();
-                for (let i = 0; i < 8; i++) {
-                    this._frameSprite.addChild(new Sprite());
-                }
-                this.addChild(this._frameSprite);
-
-                await new Promise(resolve => {
-                    skinBitmap.addLoadListener(() => {
-                        this._refreshBack(skinBitmap, 0, 0);
-                        this._refreshFram(skinBitmap, 0, 0);
-                        resolve();
-                    });
-                });
-
-                // テキスト（中央揃え）
-                const bmp = new Bitmap(this._width - 30, textH);
-                bmp.fontSize = fontSize;
-                bmp.textColor = fontColor;
-                bmp.outlineWidth = 0;
-                for (let i = 0; i < lineCount; i++) {
-                    bmp.drawText(lines[i], 0, i * (fontSize + 8) + 4, bmp.width, fontSize, "center");
-                }
-                const txtSpr = new Sprite(bmp);
-                txtSpr.x = 15;
-                txtSpr.y = 10;
-                this.addChild(txtSpr);
-
-                // 中央揃え位置
-                this.x = (cfg.width - this._width) / 2;
-                this.iconLoadPromise = Promise.resolve();
-                return this.iconLoadPromise;
-            }
-            // 通常の発言
-            const showIcon = !(this.isSelf && !cfg.showSelfIcon);
-            const showName = showIcon; // アイコン非表示時は名前も非表示
-            const isRightSide = this._side === "right";
-
-            // 名前表示用
-            let nameHeight = 0;
-            let nameSprite = null;
-            let leftMargin = 0;
-            if (showName && this.user && this.user.name) {
-                const nameFontSize = userNameFont.size || 16;
-                const nameFontColor = userNameFont.color || "#666";
-                const nameBmp = new Bitmap(this._maxW, nameFontSize + 6);
-                nameBmp.fontSize = nameFontSize;
-                nameBmp.textColor = nameFontColor;
-                nameBmp.outlineWidth = 0;
-                nameBmp.drawText(this.user.name, 0, 0, this._maxW, nameFontSize + 6, this._side);
-                nameSprite = new Sprite(nameBmp);
-                // アイコンの上端と名前の上端をproiconsizeで揃える
-                nameSprite.x = showIcon ? ( isRightSide? 0 : proiconsize + 4) : 0;
-                nameSprite.y = 0;
-                nameHeight = nameFontSize + 6;
-                this.addChild(nameSprite);
-            }
-
-            // アイコン分の左マージン（自分は右寄せなので右マージン）
-            if (showIcon) {
-                leftMargin = isRightSide ? 0 : proiconsize + 8;
-            } else {
-                leftMargin = 0;
-            }
-
-            if (type === "image") {
-                // 画像発言
-                const imgName = this.data[2];
-                const timestamp = this.data[3];
-                const bmp = ImageManager.loadPicture(imgName);
-                await new Promise(resolve => bmp.addLoadListener(resolve));
-                this._width = Math.min(this._maxW, bmp.width);
-                this._height = bmp.height+ nameHeight ;//+ 30 ;
-
-                // 画像本体
-                const imgSpr = new Sprite(bmp);
-                imgSpr.x = leftMargin;
-                imgSpr.y = nameHeight;
-                this.addChild(imgSpr);
-
-                // タイムスタンプ
-                if (timestamp) {
-                    const stampFontSize = timestampFont.size || 12;
-                    const stampFontColor = timestampFont.color || "#999";
-                    const stamp = new Bitmap(this._width, stampFontSize + 6);
-                    stamp.fontSize = stampFontSize;
-                    stamp.textColor = stampFontColor;
-                    stamp.outlineWidth = 0;
-                    stamp.drawText(timestamp, 0, 0, this._width - 10, stampFontSize + 6, this._side);
-                    const stSpr = new Sprite(stamp);
-                    stSpr.x = isRightSide ? 5-this._width : this._width + leftMargin + 5;
-                    stSpr.y = this._height - (stampFontSize + 4);
-                    this.addChild(stSpr);
-
-                    // 既読表示
-                    if (this.isSelf && this.data[4]) {
-                        const readBmp = new Bitmap(this._width, stampFontSize + 6);
-                        readBmp.fontSize = stampFontSize;
-                        readBmp.textColor = stampFontColor;
-                        readBmp.outlineWidth = 0;
-                        readBmp.drawText("既読", 0, 0, this._width - 10, stampFontSize + 6, this._side);
-                        const readSpr = new Sprite(readBmp);
-                        readSpr.x = stSpr.x;
-                        readSpr.y = stSpr.y - (stampFontSize + 6);
-                        this.addChild(readSpr);
-                    }
-                }
-
-                // アイコン
-                if (showIcon) {
-                    const icon = new Sprite(ImageManager.loadPicture(this.user.icon));
-                    icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
-                    this.addChild(icon);
-
-                    this.iconLoadPromise = new Promise(resolve => {
-                        icon.bitmap.addLoadListener(() => {
-                            icon.x = isRightSide ? this._width + 8 : 0;
-                            icon.y = 0;
-                            icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
-                            this.x = isRightSide
-                                ? (cfg.width - this._width - proiconsize - 18)
-                                : 10;
-                            if (nameSprite) {
-                                nameSprite.x = icon.x + (this._side === "right" ? -nameSprite.width - 5 : proiconsize + 5);
-                                nameSprite.y = icon.y;
-                            }
-                            resolve();
-                        });
-                    });
-                    return this.iconLoadPromise;
-                } else {
-                    // アイコン非表示時の位置調整
-                    this.x = this.isSelf
-                        ? (cfg.width - this._width - 10)
-                        : 10;
-                    if (nameSprite) {
-                        nameSprite.x = 0;
-                        nameSprite.y = 0;
-                    }
-                    this.iconLoadPromise = Promise.resolve();
-                    return this.iconLoadPromise;
-                }
-            }
-
-            // テキスト発言
-            const txt = this.data[2];
-            const lines = txt.split('\n');
-            const lineCount = lines.length;
-            const fontSize = userMessageFont.size || 20;
-            const textColor = userMessageFont.color || "#000000";
-            const textH = lineCount * (fontSize + 8);
-            // 仮Bitmapで各行の実際の幅を計測
-            const tempBmp = new Bitmap(1, 1);
-            tempBmp.fontSize = fontSize;
-            tempBmp.textColor = textColor;
-            let maxLineWidth = 0;
-            for (let i = 0; i < lines.length; i++) {
-                const w = tempBmp.measureTextWidth(lines[i]);
-                if (w > maxLineWidth) maxLineWidth = w;
-            }
-            this._width = Math.min(this._maxW, Math.ceil(maxLineWidth) + 40);
-            this._height = textH + 20 + nameHeight;
-
-            // ウィンドウスキン画像の取得
-            const skinName = this.isSelf ? selfWindowSkin : otherWindowSkin;
-            const skinBitmap = ImageManager.loadSystem(skinName);
-
-            // 背景スプライト生成
+        _createWindow_Frame() {
+            this._createFrameSprite();
+            this._createBackSprite();
+            this._refreshBack();
+            this._refreshFram();
+        }
+        _createBackSprite() {
             this._backSprite = new Sprite();
-            this._backTiling = new TilingSprite();
-            this._backSprite.addChild(this._backTiling);
+            this._backSprite.addChild(new TilingSprite());
             this.addChild(this._backSprite);
-
-            // 枠スプライト生成
+        };
+        _createFrameSprite() {
             this._frameSprite = new Sprite();
             for (let i = 0; i < 8; i++) {
                 this._frameSprite.addChild(new Sprite());
             }
             this.addChild(this._frameSprite);
+        };
 
-            // スキン画像ロード後に枠・背景を描画
-            await new Promise(resolve => {
-                skinBitmap.addLoadListener(() => {
-                    // 枠と背景を左マージン分ずらす
-                    this._refreshBack(skinBitmap, nameHeight, leftMargin);
-                    this._refreshFram(skinBitmap, nameHeight, leftMargin);
-                    resolve();
-                });
-            });
-
-            // テキスト
-            const bmp = new Bitmap(this._width - 30, textH);
-            bmp.fontSize = fontSize;
-            bmp.textColor = textColor;
-            bmp.outlineWidth = 0;
-            for (let i = 0; i < lineCount; i++) {
-                bmp.drawText(lines[i], 0, i * (fontSize + 8) + 4, bmp.width, fontSize, "left");
-            }
-            const txtSpr = new Sprite(bmp);
-            txtSpr.x = leftMargin + 20;
-            txtSpr.y = 10 + nameHeight;
-            this.addChild(txtSpr);
-
-            // タイムスタンプ
-            const stampFontSize = timestampFont.size || 12;
-            const stampFontColor = timestampFont.color || "#999";
-            const stamp = new Bitmap(this._width, stampFontSize + 6);
-            stamp.fontSize = stampFontSize;
-            stamp.textColor = stampFontColor;
-            stamp.outlineWidth = 0;
-            stamp.drawText(this.data[3], 0, 0, this._width - 10, stampFontSize + 6, this._side);
-            const stSpr = new Sprite(stamp);
-            if (isRightSide) {
-                stSpr.x = -stamp.width - 5;
-            } else {
-                stSpr.x = this._width + leftMargin + 5;
-            }
-            stSpr.y = this._height - (stampFontSize + 6);
-            this.addChild(stSpr);
-
-            // 既読表示
-            if (this.isSelf && this.data[4]) {
-                const readBmp = new Bitmap(this._width, stampFontSize + 6);
-                readBmp.fontSize = stampFontSize;
-                readBmp.textColor = stampFontColor;
-                readBmp.outlineWidth = 0;
-                readBmp.drawText("既読", 0, 0, this._width - 10, stampFontSize + 6, this._side);
-                const readSpr = new Sprite(readBmp);
-                readSpr.x = stSpr.x;
-                readSpr.y = stSpr.y - (stampFontSize + 6);
-                this.addChild(readSpr);
-            }
-
-            // アイコン
-            if (showIcon) {
-                const icon = new Sprite(ImageManager.loadPicture(this.user.icon));
-                icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
-                this.addChild(icon);
-
-                this.iconLoadPromise = new Promise(resolve => {
-                    icon.bitmap.addLoadListener(() => {
-                        icon.x = isRightSide ? this._width + 8 : 0;
-                        icon.y = 0;
-                        icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
-                        this.x = isRightSide
-                            ? (cfg.width - this._width - proiconsize - 18)
-                            : 10;
-                        if (nameSprite) {
-                            nameSprite.x = icon.x + (isRightSide ? -nameSprite.width - 5 : proiconsize + 5);
-                            nameSprite.y = icon.y;
-                        }
-                        resolve();
-                    });
-                });
-                return this.iconLoadPromise;
-            } else {
-                // アイコン非表示時の位置調整
-                this.x = isRightSide
-                    ? (cfg.width - this._width - 10)
-                    : 10;
-                if (nameSprite) {
-                    nameSprite.x = 0;
-                    nameSprite.y = 0;
-                }
-                this.iconLoadPromise = Promise.resolve();
-                return this.iconLoadPromise;
-            }
-        }
-
-        _refreshBack(skinBitmap, nameHeight = 0, leftMargin = 0) {
+        _refreshBack() {
             // Window.prototype._refreshBack を参考
             const m = windowFrameMargin;
             const w = Math.max(0, this._width - m * 2);
-            const h = Math.max(0, this._height - m * 2 - nameHeight);
+            const h = Math.max(0, this._height - m * 2);
             const sprite = this._backSprite;
-            const tilingSprite = this._backTiling;
-            sprite.bitmap = skinBitmap;
+            const tilingSprite = sprite.children[0];
+            sprite.bitmap = this.skinBitmap;
             sprite.setFrame(0, 0, 95, 95);
-            sprite.move(m + leftMargin, m + nameHeight);
+            sprite.move(m, m);
             sprite.scale.x = w / 95;
             sprite.scale.y = h / 95;
-            tilingSprite.bitmap = skinBitmap;
+            tilingSprite.bitmap = this.skinBitmap;
             tilingSprite.setFrame(0, 96, 96, 96);
             tilingSprite.move(0, 0, w, h);
             tilingSprite.scale.x = 1 / sprite.scale.x;
@@ -1017,14 +743,14 @@ var SNSBackgroundOpacity=0;
             sprite.setColorTone([0, 0, 0, 0]);
         }
 
-        _refreshFram(skinBitmap, nameHeight = 0, leftMargin = 0) {
+        _refreshFram() {
             // Windowクラスの枠描画処理を流用
-            const drect = { x: leftMargin, y: nameHeight, width: this._width, height: this._height - nameHeight };
+            const drect = { x: 0, y: 0, width: this._width, height: this._height };
             const srect = { x: 96, y: 0, width: 96, height: 96 };
             const m = 24;
             const children = this._frameSprite.children;
             for (const child of children) {
-                child.bitmap = skinBitmap;
+                child.bitmap = this.skinBitmap;
             }
             this._setRectPartsGeometry(this._frameSprite, srect, drect, m);
         }
@@ -1074,6 +800,186 @@ var SNSBackgroundOpacity=0;
             }
         }
     }
+    // メッセージウィンドウ（フキダシ）
+    class SNSMessageWindow extends Sprite {
+        constructor(user, data, isSelf, maxW) {
+            super();
+            this.user = user; this.data = data;
+            this.isSelf = isSelf;
+            this._maxW = maxW * 0.7;
+            this._systemNotice = String(data[0]) === "-1"; // システム通知判定
+            this._side = isSelf ? selfPosition : otherPosition;
+            this.iconLoadPromise = this._createWindow();
+            // ▼▼ デバッグ用: 薄い色の背景を追加 ▼▼
+            const debugBg = new Bitmap(maxW * 0.7, 200); // 高さは仮
+            debugBg.fillRect(0, 0, debugBg.width, debugBg.height, "rgba(200,200,255,0.15)");
+            const debugBgSprite = new Sprite(debugBg);
+            debugBgSprite.z = -10;
+            this.addChildAt(debugBgSprite, 0);
+            // ▲▲ ここまで ▲▲
+        }
+        async _createWindow() {
+            const type = this.data[1];
+            const isRightSide = this._side === "right";
+            const showIcon = !(this.isSelf && !cfg.showSelfIcon);
+            const showName = showIcon;
+            const leftMargin = showIcon ? (isRightSide ? 0 : proiconsize + 8) : 0;
 
+            // フレーム・テキスト表示（システム通知・テキストの場合）
+            if (this._systemNotice || type === "text") {
+                const skinBitmap = ImageManager.loadSystem(this._systemNotice ? cfg.systemWindowSkin : (this.isSelf ? selfWindowSkin : otherWindowSkin));
+                const txt = this.data[2];
+                const lines = txt.split('\n');
+                const fontSize = this._systemNotice ? systemMessageFont.size : userMessageFont.size;
+                const fontColor = this._systemNotice ? systemMessageFont.color : userMessageFont.color;
+                const lineCount = lines.length;
+                const textH = lineCount * (fontSize + 8);
+                this._width = cfg.width;
+                this._height = textH + 20 + (this._systemNotice ? 0 : nameHeight);
 
+                // テキスト
+                const bmp = new Bitmap(this._width - 30, textH + 20 + nameHeight);
+                bmp.fontSize = fontSize;
+                bmp.textColor = fontColor;
+                bmp.outlineWidth = 0;
+                let maxLineWidth = 0;
+                for (let i = 0; i < lineCount; i++) {
+                    const w = bmp.measureTextWidth(lines[i]);
+                    if (w > maxLineWidth) maxLineWidth = w;
+                }
+                this._width = Math.min(this._maxW, Math.ceil(maxLineWidth) + 40);
+                for (let i = 0; i < lineCount; i++) {
+                    bmp.drawText(lines[i], 0, i * (fontSize + 8) + 4, (maxLineWidth), fontSize, this._systemNotice ? "center" : "left");
+                }
+
+                const txtSpr = new Sprite(bmp);
+                txtSpr.x = leftMargin + 15;
+                txtSpr.y = this._systemNotice ? 10 : (showName ? nameHeight : 0) + 10;
+                //枠にテキストを重ねるためaddChild（テキスト表示）は後
+
+                //メッセージ枠
+                const frameSize = maxLineWidth + 24 + 8;
+                await new Promise(resolve => {
+                    skinBitmap.addLoadListener(() => {
+                        this.WindowFrame = new SNSMessageWindowFrame(skinBitmap, frameSize, textH + 24);
+                        this.addChild(this.WindowFrame);
+                        resolve();
+                    });
+                });
+                this.WindowFrame.x = leftMargin;
+
+                this.WindowFrame.y = this._systemNotice ? 0 : (showName ? nameHeight : 0);
+
+                this.addChild(txtSpr);//テキスト表示
+
+                //システム通知は位置を中央にして終了
+                if (this._systemNotice) {
+                    this._width = this.WindowFrame._width + leftMargin * 2;//整形
+                    this.x = Math.ceil((cfg.width - this._width) / 2);
+                    this.iconLoadPromise = Promise.resolve();
+                    return this.iconLoadPromise;
+                }
+            }
+
+            //テキストと画像が合流
+            let nameSprite = null;
+            const timestamp = this.data[3];
+            let imgMargin = 0;
+            // 名前表示用
+            if (showName && this.user && this.user.name) {
+                const nameFontSize = userNameFont.size;
+                const nameFontColor = userNameFont.color;
+                const nameBmp = new Bitmap(this._maxW, nameFontSize + 6);
+                nameBmp.fontSize = nameFontSize;
+                nameBmp.textColor = nameFontColor;
+                nameBmp.outlineWidth = 0;
+                nameBmp.drawText(this.user.name, 0, 0, this._maxW, nameFontSize + 6, this._side);
+                nameSprite = new Sprite(nameBmp);
+                // アイコンの上端と名前の上端をproiconsizeで揃える
+                nameSprite.x = showIcon ? (isRightSide ? 0 : proiconsize + 4) : 0;
+                nameSprite.y = 0;
+                this.addChild(nameSprite);
+            }
+            // アイコン
+            if (showIcon) {
+                const icon = new Sprite(ImageManager.loadPicture(this.user.icon));
+                icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
+                this.addChild(icon);
+
+                this.iconLoadPromise = new Promise(resolve => {
+                    icon.bitmap.addLoadListener(() => {
+                        icon.x = isRightSide ? this._width + 8 : 0;
+                        icon.y = 0;
+                        icon.scale.x = icon.scale.y = proiconsize / icon.bitmap.height;
+                        this.x = isRightSide
+                            ? (cfg.width - this._width - proiconsize - 18)
+                            : 10;
+                        if (nameSprite) {
+                            nameSprite.x = icon.x + (isRightSide ? -nameSprite.width - 5 : proiconsize + 5);
+                            nameSprite.y = icon.y;
+                        }
+                        resolve();
+                    });
+                });
+            } else {
+                // アイコン非表示時の位置調整
+                this.x = isRightSide
+                    ? (cfg.width - this._width - 10)
+                    : 10;
+                if (nameSprite) {
+                    nameSprite.x = 0;
+                    nameSprite.y = 0;
+                }
+            }
+            //画像の分岐
+            if (type === "image") {
+                // 画像発言
+                const imgName = this.data[2];
+                const bmp = ImageManager.loadPicture(imgName);
+                await new Promise(resolve => bmp.addLoadListener(resolve));
+                this._width = Math.min(this._maxW, bmp.width);
+                this._height = bmp.height + nameHeight;//+ 30 ;
+
+                // 画像本体
+                const imgSpr = new Sprite(bmp);
+                if (isRightSide) {
+                    imgSpr.x = bmp.width - cfg.width - proiconsize - 8;
+                    imgMargin=bmp.width;
+                } else {
+                    imgSpr.x = leftMargin;
+                }
+
+                imgSpr.y = nameHeight;
+                this.addChild(imgSpr);
+            }
+
+            // タイムスタンプ
+            if (timestamp) {
+                const stampFontSize = timestampFont.size || 12;
+                const stampFontColor = timestampFont.color || "#999";
+                const stamp = new Bitmap(this._width, stampFontSize + 6);
+                stamp.fontSize = stampFontSize;
+                stamp.textColor = stampFontColor;
+                stamp.outlineWidth = 0;
+                stamp.drawText(timestamp, 0, 0, this._width - 10, stampFontSize + 6, this._side);
+                const stSpr = new Sprite(stamp);
+                stSpr.x = isRightSide ? 5 - this._width - imgMargin : this._width + leftMargin + 5;
+                stSpr.y = this._height - (stampFontSize + 4);
+                this.addChild(stSpr);
+
+                // 既読表示
+                if (this.isSelf && this.data[4]) {
+                    const readBmp = new Bitmap(this._width, stampFontSize + 6);
+                    readBmp.fontSize = stampFontSize;
+                    readBmp.textColor = stampFontColor;
+                    readBmp.outlineWidth = 0;
+                    readBmp.drawText("既読", 0, 0, this._width - 10, stampFontSize + 6, this._side);
+                    const readSpr = new Sprite(readBmp);
+                    readSpr.x = stSpr.x;
+                    readSpr.y = stSpr.y - (stampFontSize + 6);
+                    this.addChild(readSpr);
+                }
+            }
+        }
+    }
 })();
