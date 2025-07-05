@@ -651,20 +651,7 @@ var SNSBackgroundOpacity = 0;
             this._isOver = true;
             this._inited = true;
         }
-        async _appendNewMessages() {
-            this._loading = true;
-            const log = SNSManager.getLog();
-            this._loading = false;
-        }
-
-        /**
-         * ターゲットメッセージ番号をセット
-         * @param {number} index 
-         */
-        setTargetMessageIndex(index) {
-            this._targetMsgIndex = index;
-        }
-
+        
         /**
          * ターゲットメッセージを最下部に、その前10件を上に積む
          */
