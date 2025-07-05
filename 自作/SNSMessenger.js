@@ -570,11 +570,10 @@ var SNSBackgroundOpacity = 0;
 
         // 復元
         const config = $gameSystem.getSNSConfig();
-        //    if (config?.show) {
-        this._sns._init(config);
-        this._sns.visible = true;
-        this._sns._refreshMessages();
-        //   }
+        if (config?.show) {
+            this._sns._init(config);
+            this._sns.visible = true;
+        }
     };
 
     // SNSオーバーレイクラス
@@ -650,11 +649,9 @@ var SNSBackgroundOpacity = 0;
             this.addChild(this._msgContainer);
             this._isOver = true;
             this._inited = true;
+            this._refreshMessages();
         }
-        
-        /**
-         * ターゲットメッセージを最下部に、その前10件を上に積む
-         */
+
         async _refreshMessages() {
             this._loading = true;
             const log = SNSManager.getLog();
@@ -668,7 +665,7 @@ var SNSBackgroundOpacity = 0;
             let y = 0;
             let topY = y;
             let bottomY = y;
-
+            // ターゲットと前後のメッセージ読み込み
             // まずターゲットメッセージを中央に
             const targetLogEntry = log[targetIndex];
             if (!targetLogEntry ?? true) { return; }
