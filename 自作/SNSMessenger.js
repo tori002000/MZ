@@ -109,10 +109,11 @@
  * @default 600
  * 
  * @param bufMsgAmount
- * @text 前後の表示件数
+ * @text ログから読み込む件数
  * @type number
  * @default 8
- * @desc ターゲットメッセージの前後に表示するメッセージ数
+ * @desc 処理軽減のため、一番下に表示する発言から前後に
+ * 設定数分の発言のみを読み込み表示します。
  * 
  * @param bbg
  * @text 仮背景を表示する
@@ -560,7 +561,7 @@ var SNSBackgroundOpacity = 0;
             SceneManager._scene._sns._refreshMessages();
         }
     });
-    // MAPシーン拡張：オーバーレイレイヤ追加
+    // MAPシーン拡張：レイヤ追加
     const _spMap_load = Scene_Map.prototype.createSpriteset;
     Scene_Map.prototype.createSpriteset = function () {
         _spMap_load.call(this);
@@ -598,16 +599,16 @@ var SNSBackgroundOpacity = 0;
                 this.visible = false;
             }
             if (this.visible) {
-                // 非リフレッシュで発言追加
-                if ($gameTemp._snsLogChanged) {
-                    this._appendNewMessages();
+                const log = SNSManager.getLog();
+                // スクロールが一番下（最新メッセージを見ている）のときにメッセージが追加された場合最新メッセージを表示
+                if ($gameTemp._snsLogChanged && this._targetIsLatest) {
+                    $gameSystem._snsTargetMsgIndex = log.length - 1
+                    this._refreshMessages()
                     $gameTemp._snsLogChanged = false;
                 }
-
-                // ターゲットが最新か判定しフラグをセット
-                const log = SNSManager.getLog();
+                // 最新メッセージを見ているか確認し次のメッセージ追加に備える
                 const targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
-                this._targetIsLatest = (targetIndex === Math.max(log.length - 1,0)); // 追加前の最新
+                this._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0)); // 追加前の最新
                 //■■デバッグ用
                 if (snsDebug && this._msgContainer) {
                     const scrollStep = 60;
@@ -653,20 +654,7 @@ var SNSBackgroundOpacity = 0;
         async _appendNewMessages() {
             this._loading = true;
             const log = SNSManager.getLog();
-            // $gameSystemで管理しているターゲットインデックスを取得
-            let targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
-
-            // 最新フラグがtrueなら、ターゲットインデックスが追加前の最新
-            if (this._targetIsLatest) {
-                // 追加分（ターゲットインデックスより後）のメッセージを順に追加
-                for (let i = targetIndex + 1; i < log.length; i++) {
-                    // ターゲットインデックスを進める
-                    $gameSystem._snsTargetMsgIndex=i;
-                }
-            }
-            this._refreshMessages()
             this._loading = false;
-            $gameVariables.setValue(10,$gameSystem._snsTargetMsgIndex);
         }
 
         /**
@@ -729,7 +717,7 @@ var SNSBackgroundOpacity = 0;
                 bottomY = spr.y + spr._height + 10;
             }
 
-            // 既存をクリアしてバッファ内容を一気に差し替え
+            // 既存をクリアしてバッファ内容を差し替え
             this._msgContainer.removeChildren();
             for (const spr of bufferSprites) {
                 this._msgContainer.addChild(spr);
@@ -740,16 +728,6 @@ var SNSBackgroundOpacity = 0;
 
             // スクロール位置調整
             this._msgContainer.y = Math.min(-topY, cfg.height - targetSpr._height);
-
-            // 高さ情報
-            let contentHeight = 0;
-            if (this._msgSprites.length > 0) {
-                const firstY = this._msgSprites[0].y;
-                const lastSpr = this._msgSprites[this._msgSprites.length - 1];
-                const lastBottom = lastSpr.y + lastSpr._height;
-                contentHeight = lastBottom - firstY;
-            }
-            this._msgContainer._contentHeight = contentHeight;
 
             this._loading = false;
         }
