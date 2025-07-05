@@ -1,5 +1,6 @@
 //ほぼAIによるコード
 //2025/7/3 構造見直し・バグ修正
+//2025/7/3 再度構造見直し
 /*:
  * @target MZ
  * @plugindesc SNS風画面
@@ -106,6 +107,17 @@
  * @text SNS画面高さ
  * @type number
  * @default 600
+ * 
+ * @param bufMsgAmount
+ * @text 前後の表示件数
+ * @type number
+ * @default 8
+ * @desc ターゲットメッセージの前後に表示するメッセージ数
+ * 
+ * @param bbg
+ * @text 仮背景を表示する
+ * @type boolean
+ * @default true
  * 
  * @command RegisterUser
  * @text ユーザーを登録
@@ -269,7 +281,21 @@
  * @desc この発言が既読かどうか。trueなら既読、falseなら未読。
  * 無記入の場合変更しません。
  * 
- * 
+ * @command SNSPrevTarget
+ * @text ターゲットを戻す
+ * @desc ターゲットインデックスを指定量だけ戻します。
+ * @arg amount
+ * @type number
+ * @default 1
+ * @desc 戻す量
+ *
+ * @command SNSNextTarget
+ * @text ターゲットを進める
+ * @desc ターゲットインデックスを指定量だけ進めます。
+ * @arg amount
+ * @type number
+ * @default 1
+ * @desc 進める量
  * @help
  * SNS風なメッセージ表示
  * 
@@ -281,22 +307,18 @@
  * 
  * 応用編
  * ・自分の発言に既読を付けて既読スルー・通知スルー
- * ・ユーザーID:-1 はシステムメッセージ　「--が入室しました」「--が退室しました」
+ * ・ユーザーID:-1 はシステムメッセージ　「--が入室しました」「--が退室しました」とか入れよう
  * ・直前のメッセージを発言取り消しシステムメッセージに書き変えて「送る相手間違えちゃった☆」な演出（送信画像でも可）
  * ・ユーザー登録コマンドで既存のユーザー情報を書き変えて「あいついつの間にかアイコン変わってる・ユーザー名も変わってる」
  * 
- * おまけ
- * ・スクリプトでSNSBackgroundOpacity=1;を入力してメニューを開閉すると仮背景が表示される
- * ・SceneManager._scene._sns._msgContainer.y　がメッセージコンテナのスクロール量
- * ・PageUP、PageDownキーでスクロールする機能が残っている
+ * お役立ち情報
+ * ・$gameSystem._snsLog.length - 1
+ * 　　└最後の発言の番号
+ * ・SceneManager._scene._sns._targetIsLatest
+ * 　　└現在ターゲットが最新の発言のときONになるフラグ
  * 
  * 
- * 予定・課題
- * ・画面を閉じているときに発言があった場合の挙動
- * ・発言があると強制的に最新の発言に飛ぶ挙動の是非
- * ・ふきだしのしっぽ
- * ・なめらかなスクロール
- * ・コマンドやキー入力によるスクロール
+ * 
  * 
  */
 /*~struct~Font:
@@ -314,6 +336,7 @@
 */
 var SNSBackgroundOpacity = 0;
 (() => {
+    const snsDebug = false;
     const PLUGIN = "SNSMessenger";
     const params = PluginManager.parameters(PLUGIN);
     const proiconsize = Number(params.iconSize) || 48;
@@ -327,7 +350,7 @@ var SNSBackgroundOpacity = 0;
     const systemMessageFont = parseFontParam(params.systemMessageFont) || { "size": 16, "color": "#FFFFFF" };
     const selfPosition = params.selfPosition || "right";
     const otherPosition = params.otherPosition || "left";
-
+    const bufMsgAmount = Number(params.bufMsgAmount) || 8;
     const nameHeight = userNameFont.size + 6;
     const cfg = {
         width: +params.snsWidth,
@@ -387,6 +410,7 @@ var SNSBackgroundOpacity = 0;
         this._users = {};
         this._snsLog = [];
         this._snsSelfId = "0";
+        this._snsTargetMsgIndex = 0;
         this._snsConfig = {
             show: false,
             x: 0,
@@ -438,7 +462,7 @@ var SNSBackgroundOpacity = 0;
             y: +args.y,
         };
         $gameSystem.setSNSConfig(config);
-        $gameTemp._snsLogChanged = true; // 表示もトリガー
+        // $gameTemp._snsLogChanged = true; // 表示もトリガー
     });
     PluginManagerEx.registerCommand(document.currentScript, "HideSNS", () => {
         const config = $gameSystem.getSNSConfig();
@@ -517,6 +541,25 @@ var SNSBackgroundOpacity = 0;
             $gameTemp._snsLogChanged = true;
         }
     });
+    PluginManagerEx.registerCommand(document.currentScript, "SNSPrevTarget", args => {
+        // 指定量だけターゲットインデックスを戻す
+        const amount = Number(args.amount) || 1;
+        const log = $gameSystem._snsLog || [];
+        $gameSystem._snsTargetMsgIndex = Math.max(1, ($gameSystem._snsTargetMsgIndex || 1) - amount);
+        if (SceneManager._scene && SceneManager._scene._sns) {
+            SceneManager._scene._sns._refreshMessages();
+        }
+    });
+
+    PluginManagerEx.registerCommand(document.currentScript, "SNSNextTarget", args => {
+        // 指定量だけターゲットインデックスを進める
+        const amount = Number(args.amount) || 1;
+        const log = $gameSystem._snsLog || [];
+        $gameSystem._snsTargetMsgIndex = Math.min(log.length - 1, ($gameSystem._snsTargetMsgIndex || 1) + amount);
+        if (SceneManager._scene && SceneManager._scene._sns) {
+            SceneManager._scene._sns._refreshMessages();
+        }
+    });
     // MAPシーン拡張：オーバーレイレイヤ追加
     const _spMap_load = Scene_Map.prototype.createSpriteset;
     Scene_Map.prototype.createSpriteset = function () {
@@ -526,11 +569,11 @@ var SNSBackgroundOpacity = 0;
 
         // 復元
         const config = $gameSystem.getSNSConfig();
-        if (config?.show) {
-            this._sns._init(config);
-            this._sns.visible = true;
-            this._sns._refreshMessages();
-        }
+        //    if (config?.show) {
+        this._sns._init(config);
+        this._sns.visible = true;
+        this._sns._refreshMessages();
+        //   }
     };
 
     // SNSオーバーレイクラス
@@ -540,13 +583,16 @@ var SNSBackgroundOpacity = 0;
             this.visible = false;
             this._msgSprites = [];
             this._loading = false;
-            this._lastMsgCount = 0; // 追加
+            this._lastMsgCount = 0;
+            this._targetMsgIndex = 1; // ★ターゲットメッセージ番号
+            this._topY = 10; // ★頂上y座標プロパティを追加
+            this._bottomY = 0;
         }
         update() {
             super.update();
             const st = $gameSystem.getSNSConfig();
             if (st.show) {
-                if (!this._inited) { this._init(st); }//最初の実行時は初期化処理
+                if (!this._inited) { this._init(st); }
                 this.visible = true;
             } else if (!st.show && this.visible) {
                 this.visible = false;
@@ -558,9 +604,13 @@ var SNSBackgroundOpacity = 0;
                     $gameTemp._snsLogChanged = false;
                 }
 
-                if (this._msgContainer) {
-                    const scrollStep = 60; // 1回のスクロール量（ピクセル）
-                    const maxScroll = Math.max(0, this._msgContainer.height - (cfg.height - 20));
+                // ターゲットが最新か判定しフラグをセット
+                const log = SNSManager.getLog();
+                const targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
+                this._targetIsLatest = (targetIndex === Math.max(log.length - 1,0)); // 追加前の最新
+                //■■デバッグ用
+                if (snsDebug && this._msgContainer) {
+                    const scrollStep = 60;
                     if (Input.isRepeated("pageup")) {
                         this._msgContainer.y = this._msgContainer.y + scrollStep;
                     }
@@ -577,16 +627,14 @@ var SNSBackgroundOpacity = 0;
 
         _init(st) {
             this.x = st.x; this.y = st.y;
-            if (st.bg) {
-                this._bg = new Sprite(ImageManager.loadPicture(""));
-            } else {
+            if (params.bbg === "true") {
                 // 青で塗りつぶしたBitmapを作成
                 const bmp = new Bitmap(cfg.width, cfg.height);
-                bmp.fillRect(0, 0, cfg.width, cfg.height, "rgba(130,180,230," + String(SNSBackgroundOpacity) + ")");
+                bmp.fillRect(0, 0, cfg.width, cfg.height, "rgba(130,180,230,1");
                 this._bg = new Sprite(bmp);
+                this._bg.x = 0; this._bg.y = 0;
+                this.addChild(this._bg);
             }
-            this._bg.x = 0; this._bg.y = 0;
-            this.addChild(this._bg);
             this._msgContainer = new Sprite();
             this._msgContainer.y = (typeof st.scrollY === "number") ? st.scrollY : 10;
 
@@ -599,36 +647,101 @@ var SNSBackgroundOpacity = 0;
             this.addChild(mask);
 
             this.addChild(this._msgContainer);
+            this._isOver = true;
             this._inited = true;
         }
         async _appendNewMessages() {
             this._loading = true;
             const log = SNSManager.getLog();
-            let y = 10;
-            if (this._msgSprites.length > 0) {
-                // 既存スプライトの末尾y座標を取得
-                const lastSpr = this._msgSprites[this._msgSprites.length - 1];
-                y = lastSpr.y + lastSpr._height + 10;
-            }
-            const newLogs = log.slice(this._msgSprites.length);
-            const tempSprites = [];
-            const promises = newLogs.map(m => {
-                const user = SNSManager.getUser(m[0]);
-                const isSelf = SNSManager.isSelf(m[0]);
-                const spr = new SNSMessageWindow(user, m, isSelf, cfg.width);
-                tempSprites.push(spr);
-                return spr.iconLoadPromise.then(() => spr);
-            });
-            const loadedSprites = await Promise.all(promises);
+            // $gameSystemで管理しているターゲットインデックスを取得
+            let targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
 
-            for (const spr of loadedSprites) {
-                spr.y = y;
-                y += spr._height + 10;
+            // 最新フラグがtrueなら、ターゲットインデックスが追加前の最新
+            if (this._targetIsLatest) {
+                // 追加分（ターゲットインデックスより後）のメッセージを順に追加
+                for (let i = targetIndex + 1; i < log.length; i++) {
+                    // ターゲットインデックスを進める
+                    $gameSystem._snsTargetMsgIndex=i;
+                }
+            }
+            this._refreshMessages()
+            this._loading = false;
+            $gameVariables.setValue(10,$gameSystem._snsTargetMsgIndex);
+        }
+
+        /**
+         * ターゲットメッセージ番号をセット
+         * @param {number} index 
+         */
+        setTargetMessageIndex(index) {
+            this._targetMsgIndex = index;
+        }
+
+        /**
+         * ターゲットメッセージを最下部に、その前10件を上に積む
+         */
+        async _refreshMessages() {
+            this._loading = true;
+            const log = SNSManager.getLog();
+            // ターゲットインデックスを$gameSystemから取得
+            let targetIndex = ($gameSystem._snsTargetMsgIndex >= 0 && $gameSystem._snsTargetMsgIndex < log.length)
+                ? $gameSystem._snsTargetMsgIndex
+                : log.length - 1;
+
+            // バッファ用配列
+            const bufferSprites = [];
+            let y = 0;
+            let topY = y;
+            let bottomY = y;
+
+            // まずターゲットメッセージを中央に
+            const targetLogEntry = log[targetIndex];
+            if (!targetLogEntry ?? true) { return; }
+            const targetUser = SNSManager.getUser(targetLogEntry[0]);
+            const targetIsSelf = SNSManager.isSelf(targetLogEntry[0]);
+            const targetSpr = new SNSMessageWindow(targetUser, targetLogEntry, targetIsSelf, cfg.width);
+            await targetSpr.iconLoadPromise;
+            targetSpr.y = y;
+            bufferSprites.push(targetSpr);
+            topY = y;
+            bottomY = y + targetSpr._height + 10;
+            let lastHeight = 0;
+            // 上方向（ターゲットより前）
+            for (let i = targetIndex - 1; i >= Math.max(0, targetIndex - bufMsgAmount); i--) {
+                const logEntry = log[i];
+                const user = SNSManager.getUser(logEntry[0]);
+                const isSelf = SNSManager.isSelf(logEntry[0]);
+                const spr = new SNSMessageWindow(user, logEntry, isSelf, cfg.width);
+                await spr.iconLoadPromise;
+                spr.y = topY - spr._height - 10;
+                bufferSprites.unshift(spr); // 上に積む
+                topY = spr.y;
+            }
+            // 下方向（ターゲットより後）
+            for (let i = targetIndex + 1; i < Math.min(log.length, targetIndex + bufMsgAmount); i++) {
+                const logEntry = log[i];
+                const user = SNSManager.getUser(logEntry[0]);
+                const isSelf = SNSManager.isSelf(logEntry[0]);
+                const spr = new SNSMessageWindow(user, logEntry, isSelf, cfg.width);
+                await spr.iconLoadPromise;
+                spr.y = bottomY;
+                bufferSprites.push(spr); // 下に積む
+                bottomY = spr.y + spr._height + 10;
+            }
+
+            // 既存をクリアしてバッファ内容を一気に差し替え
+            this._msgContainer.removeChildren();
+            for (const spr of bufferSprites) {
                 this._msgContainer.addChild(spr);
-                this._msgSprites.push(spr);
             }
+            this._msgSprites = bufferSprites;
+            this._topY = topY;
+            this._bottomY = bottomY;
 
-            // 高さ再計算
+            // スクロール位置調整
+            this._msgContainer.y = Math.min(-topY, cfg.height - targetSpr._height);
+
+            // 高さ情報
             let contentHeight = 0;
             if (this._msgSprites.length > 0) {
                 const firstY = this._msgSprites[0].y;
@@ -638,60 +751,11 @@ var SNSBackgroundOpacity = 0;
             }
             this._msgContainer._contentHeight = contentHeight;
 
-            // スクロール位置調整
-            const totalH = this._msgContainer._contentHeight;
-            const maxH = cfg.height - 20;
-            if (totalH > maxH) {
-                this._msgContainer.y = 10 - (totalH - maxH);
-                if (this._msgContainer.y > 10) this._msgContainer.y = 10;
-            } else {
-                this._msgContainer.y = 10;
-            }
             this._loading = false;
         }
 
-        // 既存の全リロードは初期化時のみ使う
-        async _refreshMessages() {
-            this._loading = true;
-            // ここは初期化時のみ呼ばれるようにする
-            const log = SNSManager.getLog();
-            let y = 10;
-            const tempSprites = [];
-            const promises = log.map(m => {
-                const user = SNSManager.getUser(m[0]);
-                const isSelf = SNSManager.isSelf(m[0]);
-                const spr = new SNSMessageWindow(user, m, isSelf, cfg.width);
-                tempSprites.push(spr);
-                return spr.iconLoadPromise.then(() => spr);
-            });
-            const loadedSprites = await Promise.all(promises);
-
-            this._msgContainer.removeChildren();
-            y = 10;
-            for (const spr of loadedSprites) {
-                spr.y = y;
-                y += spr._height + 10;
-                this._msgContainer.addChild(spr);
-            }
-            this._msgSprites = loadedSprites;
-
-            // ...高さ計算・スクロール調整は同じ...
-            const totalH = this._msgContainer._contentHeight;
-            const maxH = cfg.height - 20;
-            const config = $gameSystem.getSNSConfig();
-            if (typeof config.scrollY === "number") {
-                this._msgContainer.y = config.scrollY;
-            } else {
-                if (totalH > maxH) {
-                    this._msgContainer.y = 10 - (totalH - maxH);
-                    if (this._msgContainer.y > 10) this._msgContainer.y = 10;
-                } else {
-                    this._msgContainer.y = 10;
-                }
-            }
-            this._loading = false;
-        }
     }
+
     class SNSMessageWindowFrame extends Sprite {
         constructor(skinBitmap, width, height) {
             super();
@@ -856,7 +920,6 @@ var SNSBackgroundOpacity = 0;
                     });
                 });
                 this.WindowFrame.x = leftMargin;
-
                 this.WindowFrame.y = this._systemNotice ? 0 : (showName ? nameHeight : 0);
 
                 this.addChild(txtSpr);//テキスト表示
@@ -933,7 +996,7 @@ var SNSBackgroundOpacity = 0;
                 const imgSpr = new Sprite(bmp);
                 if (isRightSide) {
                     imgSpr.x = bmp.width - cfg.width - proiconsize - 8;
-                    imgMargin=bmp.width;
+                    imgMargin = bmp.width;
                 } else {
                     imgSpr.x = leftMargin;
                 }
