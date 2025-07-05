@@ -1,6 +1,7 @@
 //ほぼAIによるコード
 //2025/7/3 構造見直し・バグ修正
 //2025/7/5 再度構造見直し・スクロールアニメ追加
+//2025/7/6 SNS画面を閉じているときの挙動を変更
 /*:
  * @target MZ
  * @plugindesc SNS風画面
@@ -111,9 +112,9 @@
  * @param bufMsgAmount
  * @text ログから読み込む件数
  * @type number
- * @default 8
- * @desc 処理軽減のため、一番下に表示する発言から前後に
- * 設定数分の発言のみを読み込み表示します。
+ * @default 10
+ * @desc 処理軽減のため一番下の発言から前後の設定件数分の発言のみを
+ * 表示します。画面から少しはみ出るくらいが理想です。
  * 
  * @param scrollAnimOffset
  * @text スクロールアニメ開始位置オフセット
@@ -297,16 +298,18 @@
  * 無記入の場合変更しません。
  * 
  * @command SNSPrevTarget
- * @text ターゲットを戻す
- * @desc ターゲットインデックスを指定量だけ戻します。
+ * @text 表示中の発言を遡る
+ * @desc 過去の発言を見返します。
+ * SNS画面を開いているときのみ有効です。
  * @arg amount
  * @type number
  * @default 1
  * @desc 戻す量
  *
  * @command SNSNextTarget
- * @text ターゲットを進める
- * @desc ターゲットインデックスを指定量だけ進めます。
+ * @text 表示中の発言を進める
+ * @desc より新しい発言を表示します。
+ * SNS画面を開いているときのみ有効です。
  * @arg amount
  * @type number
  * @default 1
@@ -325,8 +328,15 @@
  * ・ユーザーID:-1 はシステムメッセージ　「--が入室しました」「--が退室しました」とか入れよう
  * ・直前のメッセージを発言取り消しシステムメッセージに書き変えて「送る相手間違えちゃった☆」な演出（送信画像でも可）
  * ・ユーザー登録コマンドで既存のユーザー情報を書き変えて「あいついつの間にかアイコン変わってる・ユーザー名も変わってる」
+ * ・一番下までスクロールしていない時に
  * 
  * お役立ち情報
+ * ・SNS画面を開いていて最新の発言を表示している状態で発言が追加されると
+ * 　自動でSNS画面を更新して最新までスクロールする
+ * 　閉じている状態で発言が追加されると現在位置が最新のものではなくなり、
+ * 　自動スクロールが機能しなくなる
+ * 　SNS画面を開くときには発言を進めるコマンド+99を併用がおすすめ
+ * 　
  * ・$gameSystem._snsLog.length - 1
  * 　　└最後の発言の番号
  * ・SceneManager._scene._sns._targetIsLatest
@@ -365,8 +375,8 @@ var SNSBackgroundOpacity = 0;
     const systemMessageFont = parseFontParam(params.systemMessageFont) || { "size": 16, "color": "#FFFFFF" };
     const selfPosition = params.selfPosition || "right";
     const otherPosition = params.otherPosition || "left";
-    const bufMsgAmount = Number(params.bufMsgAmount) || 8;
-    const scrollAnimOffset = isNaN(Number(params.scrollAnimOffset)) ? 50:Number(params.scrollAnimOffset);
+    const bufMsgAmount = Number(params.bufMsgAmount) || 10;
+    const scrollAnimOffset = isNaN(Number(params.scrollAnimOffset)) ? 50 : Number(params.scrollAnimOffset);
     const scrollAnimSpeed = Number(params.scrollAnimSpeed) || 0.15;
     const nameHeight = userNameFont.size + 6;
     const cfg = {
@@ -428,6 +438,8 @@ var SNSBackgroundOpacity = 0;
         this._snsLog = [];
         this._snsSelfId = "0";
         this._snsTargetMsgIndex = 0;
+        this._snsLastTargetIndex = 0;
+        this._targetIsLatest = true;
         this._snsConfig = {
             show: false,
             x: 0,
@@ -460,6 +472,7 @@ var SNSBackgroundOpacity = 0;
         const timestamp = args.timestamp || "";
         const isRead = args.isRead === "true";
         SNSManager.addMessage(userId, type, content, timestamp, isRead);
+        if (!SceneManager._scene._sns.visible) $gameSystem._targetIsLatest = false;
     });
 
     PluginManagerEx.registerCommand(document.currentScript, "AddImage", args => {
@@ -469,6 +482,7 @@ var SNSBackgroundOpacity = 0;
         const timestamp = args.timestamp || "";
         const isRead = args.isRead === "true";
         SNSManager.addMessage(userId, type, content, timestamp, isRead);
+        if (!SceneManager._scene._sns.visible) $gameSystem._targetIsLatest = false;
     });
 
 
@@ -527,7 +541,7 @@ var SNSBackgroundOpacity = 0;
     PluginManagerEx.registerCommand(document.currentScript, "MarkAllSelfMessagesRead", () => {
         SNSManager.markAllSelfMessagesRead();
         // SNS画面表示中なら即時リフレッシュ
-        if (SceneManager._scene && SceneManager._scene._sns) {
+        if (SceneManager._scene && SceneManager._scene._sns.visible) {
             SceneManager._scene._sns._refreshMessages();
         }
     });
@@ -562,8 +576,8 @@ var SNSBackgroundOpacity = 0;
         // 指定量だけターゲットインデックスを戻す
         const amount = Number(args.amount) || 1;
         const log = $gameSystem._snsLog || [];
-        $gameSystem._snsTargetMsgIndex = Math.max(1, ($gameSystem._snsTargetMsgIndex || 1) - amount);
-        if (SceneManager._scene && SceneManager._scene._sns) {
+        if (SceneManager._scene && SceneManager._scene._sns&&$gameSystem.getSNSConfig().show) {
+            $gameSystem._snsTargetMsgIndex = Math.max(0, ($gameSystem._snsTargetMsgIndex || 1) - amount);
             SceneManager._scene._sns._refreshMessages();
         }
     });
@@ -572,8 +586,8 @@ var SNSBackgroundOpacity = 0;
         // 指定量だけターゲットインデックスを進める
         const amount = Number(args.amount) || 1;
         const log = $gameSystem._snsLog || [];
-        $gameSystem._snsTargetMsgIndex = Math.min(log.length - 1, ($gameSystem._snsTargetMsgIndex || 1) + amount);
-        if (SceneManager._scene && SceneManager._scene._sns) {
+        if (SceneManager._scene && SceneManager._scene._sns&&$gameSystem.getSNSConfig().show) {
+            $gameSystem._snsTargetMsgIndex = Math.min(Math.max(log.length - 1,0), ($gameSystem._snsTargetMsgIndex || 1) + amount);
             SceneManager._scene._sns._refreshMessages();
         }
     });
@@ -583,11 +597,14 @@ var SNSBackgroundOpacity = 0;
         _spMap_load.call(this);
         this._sns = new SNSLayer();
         this.addChild(this._sns);
+        const log = SNSManager.getLog();
+        const targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
+        $gameSystem._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0));
 
         // 復元
         const config = $gameSystem.getSNSConfig();
+        this._sns._init(config);
         if (config?.show) {
-            this._sns._init(config);
             this._sns.visible = true;
         }
     };
@@ -618,13 +635,13 @@ var SNSBackgroundOpacity = 0;
             }
             if (this.visible) {
                 const log = SNSManager.getLog();
-                if ($gameTemp._snsLogChanged && this._targetIsLatest) {
+                if ($gameTemp._snsLogChanged && $gameSystem._targetIsLatest) {
                     $gameSystem._snsTargetMsgIndex = log.length - 1
                     this._refreshMessages()
                     $gameTemp._snsLogChanged = false;
                 }
                 const targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
-                this._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0));
+                $gameSystem._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0));
                 // スクロールアニメーション
                 if (this._msgContainer) {
                     if (this._pendingScroll) {
@@ -683,6 +700,9 @@ var SNSBackgroundOpacity = 0;
         }
 
         async _refreshMessages() {
+            if (!this._inited) {
+                return;
+            }
             this._loading = true;
             const log = SNSManager.getLog();
             let targetIndex = ($gameSystem._snsTargetMsgIndex >= 0 && $gameSystem._snsTargetMsgIndex < log.length)
@@ -690,8 +710,8 @@ var SNSBackgroundOpacity = 0;
                 : log.length - 1;
 
             // 前回のターゲットインデックスを保存
-            const prevTargetIndex = this._lastTargetIndex ?? targetIndex;
-            this._lastTargetIndex = targetIndex;
+            const prevTargetIndex = $gameSystem._snsLastTargetIndex ?? targetIndex;
+            $gameSystem._snsLastTargetIndex = targetIndex;
 
             // バッファ用配列
             const bufferSprites = [];
@@ -750,7 +770,7 @@ var SNSBackgroundOpacity = 0;
             else if (targetIndex < prevTargetIndex) direction = -1; // 前へ（上方向）
 
             // 50px分ずらした位置からアニメーション開始
-            if (direction !== 0 && scrollAnimOffset-this._topY > cfg.height) {
+            if (direction !== 0 && scrollAnimOffset - this._topY > cfg.height) {
                 this._msgContainer.y = newTargetY + direction * scrollAnimOffset;
                 this._scrollTargetY = newTargetY;
                 this._pendingScroll = true;
