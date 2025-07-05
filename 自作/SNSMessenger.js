@@ -1,6 +1,6 @@
 //ほぼAIによるコード
 //2025/7/3 構造見直し・バグ修正
-//2025/7/5 再度構造見直し
+//2025/7/5 再度構造見直し・スクロールアニメ追加
 /*:
  * @target MZ
  * @plugindesc SNS風画面
@@ -115,6 +115,20 @@
  * @desc 処理軽減のため、一番下に表示する発言から前後に
  * 設定数分の発言のみを読み込み表示します。
  * 
+ * @param scrollAnimOffset
+ * @text スクロールアニメ開始位置オフセット
+ * @type number
+ * @default 50
+ * @desc アニメ開始位置を何ピクセルずらすか
+ * 0ならアニメーションしない
+ *
+ * @param scrollAnimSpeed
+ * @text スクロールアニメ速さ
+ * @type number
+ * @decimals 2
+ * @default 0.15
+ * @desc スクロールアニメの速さ（0.05～0.5程度が推奨、値が大きいほど速い）
+ *
  * @param bbg
  * @text 仮背景を表示する
  * @type boolean
@@ -352,6 +366,8 @@ var SNSBackgroundOpacity = 0;
     const selfPosition = params.selfPosition || "right";
     const otherPosition = params.otherPosition || "left";
     const bufMsgAmount = Number(params.bufMsgAmount) || 8;
+    const scrollAnimOffset = isNaN(Number(params.scrollAnimOffset)) ? 50:Number(params.scrollAnimOffset);
+    const scrollAnimSpeed = Number(params.scrollAnimSpeed) || 0.15;
     const nameHeight = userNameFont.size + 6;
     const cfg = {
         width: +params.snsWidth,
@@ -584,9 +600,12 @@ var SNSBackgroundOpacity = 0;
             this._msgSprites = [];
             this._loading = false;
             this._lastMsgCount = 0;
-            this._targetMsgIndex = 1; // ★ターゲットメッセージ番号
-            this._topY = 10; // ★頂上y座標プロパティを追加
+            this._targetMsgIndex = 1;
+            this._topY = 10;
             this._bottomY = 0;
+            this._scrollTargetY = 0;
+            this._scrollSpeed = scrollAnimSpeed; // 少し速め
+            this._pendingScroll = false; // アニメーション開始フラグ
         }
         update() {
             super.update();
@@ -599,16 +618,26 @@ var SNSBackgroundOpacity = 0;
             }
             if (this.visible) {
                 const log = SNSManager.getLog();
-                // スクロールが一番下（最新メッセージを見ている）のときにメッセージが追加された場合最新メッセージを表示
                 if ($gameTemp._snsLogChanged && this._targetIsLatest) {
                     $gameSystem._snsTargetMsgIndex = log.length - 1
                     this._refreshMessages()
                     $gameTemp._snsLogChanged = false;
                 }
-                // 最新メッセージを見ているか確認し次のメッセージ追加に備える
                 const targetIndex = $gameSystem._snsTargetMsgIndex ?? (log.length - 1);
-                this._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0)); // 追加前の最新
-                //■■デバッグ用
+                this._targetIsLatest = (targetIndex === Math.max(log.length - 1, 0));
+                // スクロールアニメーション
+                if (this._msgContainer) {
+                    if (this._pendingScroll) {
+                        // イージング
+                        if (Math.abs(this._msgContainer.y - this._scrollTargetY) > 1) {
+                            this._msgContainer.y += (this._scrollTargetY - this._msgContainer.y) * this._scrollSpeed;
+                        } else {
+                            this._msgContainer.y = this._scrollTargetY;
+                            this._pendingScroll = false;
+                        }
+                    }
+                }
+                // デバッグ用ページ送り
                 if (snsDebug && this._msgContainer) {
                     const scrollStep = 60;
                     if (Input.isRepeated("pageup")) {
@@ -617,7 +646,6 @@ var SNSBackgroundOpacity = 0;
                     if (Input.isRepeated("pagedown")) {
                         this._msgContainer.y = this._msgContainer.y - scrollStep;
                     }
-                    // スクロール位置を保存
                     const config = $gameSystem.getSNSConfig();
                     config.scrollY = this._msgContainer.y;
                     $gameSystem.setSNSConfig(config);
@@ -637,6 +665,8 @@ var SNSBackgroundOpacity = 0;
             }
             this._msgContainer = new Sprite();
             this._msgContainer.y = (typeof st.scrollY === "number") ? st.scrollY : 10;
+            // 追加: スクロール目標値も初期化
+            this._scrollTargetY = this._msgContainer.y;
 
             // メッセージ部分にマスクを設定 
             const mask = new PIXI.Graphics();
@@ -655,18 +685,19 @@ var SNSBackgroundOpacity = 0;
         async _refreshMessages() {
             this._loading = true;
             const log = SNSManager.getLog();
-            // ターゲットインデックスを$gameSystemから取得
             let targetIndex = ($gameSystem._snsTargetMsgIndex >= 0 && $gameSystem._snsTargetMsgIndex < log.length)
                 ? $gameSystem._snsTargetMsgIndex
                 : log.length - 1;
+
+            // 前回のターゲットインデックスを保存
+            const prevTargetIndex = this._lastTargetIndex ?? targetIndex;
+            this._lastTargetIndex = targetIndex;
 
             // バッファ用配列
             const bufferSprites = [];
             let y = 0;
             let topY = y;
             let bottomY = y;
-            // ターゲットと前後のメッセージ読み込み
-            // まずターゲットメッセージを中央に
             const targetLogEntry = log[targetIndex];
             if (!targetLogEntry ?? true) { return; }
             const targetUser = SNSManager.getUser(targetLogEntry[0]);
@@ -711,7 +742,24 @@ var SNSBackgroundOpacity = 0;
             this._bottomY = bottomY;
 
             // スクロール位置調整
-            this._msgContainer.y = Math.min(-topY, cfg.height - targetSpr._height);
+            const newTargetY = Math.min(-topY, cfg.height - targetSpr._height);
+
+            // 方向判定
+            let direction = 0;
+            if (targetIndex > prevTargetIndex) direction = 1; // 次へ（下方向）
+            else if (targetIndex < prevTargetIndex) direction = -1; // 前へ（上方向）
+
+            // 50px分ずらした位置からアニメーション開始
+            if (direction !== 0 && scrollAnimOffset-this._topY > cfg.height) {
+                this._msgContainer.y = newTargetY + direction * scrollAnimOffset;
+                this._scrollTargetY = newTargetY;
+                this._pendingScroll = true;
+            } else {
+                // 初回や同じ位置なら即座に
+                this._msgContainer.y = newTargetY;
+                this._scrollTargetY = newTargetY;
+                this._pendingScroll = false;
+            }
 
             this._loading = false;
         }
