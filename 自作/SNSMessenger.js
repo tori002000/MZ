@@ -9,6 +9,16 @@
  * @base PluginCommonBase
  * @orderAfter PluginCommonBase
  * 
+ * @param snsWidth
+ * @text SNS画面幅
+ * @type number
+ * @default 600
+ *
+ * @param snsHeight
+ * @text SNS画面高さ
+ * @type number
+ * @default 600
+ * 
  * @param iconSize
  * @text アイコンサイズ
  * @type number
@@ -20,8 +30,14 @@
  * @text 自分のアイコンを表示
  * @type boolean
  * @default true
- * @desc 自分の発言にアイコンを表示するかどうか。
+ * @desc 自分の発言にアイコンと名前を表示するかどうか。
 
+ * @param showReadSwitch
+ * @text 自分の既読を表示
+ * @type boolean
+ * @default true
+ * @desc 自分の発言に既読を表示するかどうか。
+ * 
  * @param selfPosition
  * @text 自分の表示位置
  * @type select
@@ -69,11 +85,6 @@
  * @desc システム通知のウィンドウのスキン画像。
  * 角が突き出るなら増やす。
  * 
- * @param showReadSwitch
- * @text 既読を表示
- * @type boolean
- * @default true
- * @desc 自分の発言に既読を表示するかどうか。
  * 
  * @param userMessageFont
  * @text ユーザーメッセージのフォント
@@ -99,15 +110,6 @@
  * @type struct<Font>
  * @default {"size":"14","color":"#FFFFFF"}
  *
- * @param snsWidth
- * @text SNS画面幅
- * @type number
- * @default 600
- *
- * @param snsHeight
- * @text SNS画面高さ
- * @type number
- * @default 600
  * 
  * @param bufMsgAmount
  * @text ログから読み込む件数
@@ -241,7 +243,7 @@
  * 
  * @command ClearSNSLog
  * @text SNSログを初期化
- * @desc SNSログとユーザー情報をすべて初期化します。
+ * @desc SNSログとユーザー情報をすべて初期化し、SNS画面を初期化します。
  * @arg clearUsers
  * @type boolean
  * @default true
@@ -507,7 +509,15 @@ var SNSBackgroundOpacity = 0;
             $gameSystem._snsSelfId = "0";
         }
         $gameSystem._snsLog = [];
+        $gameSystem._snsTargetMsgIndex = 0;
+        $gameSystem._snsLastTargetIndex = 0;
+        $gameSystem._targetIsLatest = true;
         $gameTemp._snsLogChanged = true;
+        //ログが初期状態だとリフレッシュ時更新を行わないためここで初期化処理
+        if (SceneManager._scene && SceneManager._scene._sns) {
+            const config = $gameSystem.getSNSConfig();
+            SceneManager._scene._sns._init(config);
+        }
     });
     PluginManagerEx.registerCommand(document.currentScript, "ForceRefreshSNS", () => {
         if (SceneManager._scene && SceneManager._scene._sns) {
@@ -531,6 +541,7 @@ var SNSBackgroundOpacity = 0;
                     $gameSystem._users = JsonEx.makeDeepCopy(data.users || {});
                     $gameSystem._snsLog = JsonEx.makeDeepCopy(data.log || []);
                     $gameSystem._snsSelfId = data.selfId || "0";
+                    $gameSystem._snsTargetMsgIndex=$gameSystem._snsLog;
                     $gameTemp._snsLogChanged = true;
                 }
             }
@@ -575,7 +586,7 @@ var SNSBackgroundOpacity = 0;
         // 指定量だけターゲットインデックスを戻す
         const amount = Number(args.amount) || 1;
         const log = $gameSystem._snsLog || [];
-        if (SceneManager._scene && SceneManager._scene._sns&&$gameSystem.getSNSConfig().show) {
+        if (SceneManager._scene && SceneManager._scene._sns && $gameSystem.getSNSConfig().show) {
             $gameSystem._snsTargetMsgIndex = Math.max(0, ($gameSystem._snsTargetMsgIndex || 1) - amount);
             SceneManager._scene._sns._refreshMessages();
         }
@@ -585,8 +596,8 @@ var SNSBackgroundOpacity = 0;
         // 指定量だけターゲットインデックスを進める
         const amount = Number(args.amount) || 1;
         const log = $gameSystem._snsLog || [];
-        if (SceneManager._scene && SceneManager._scene._sns&&$gameSystem.getSNSConfig().show) {
-            $gameSystem._snsTargetMsgIndex = Math.min(Math.max(log.length - 1,0), ($gameSystem._snsTargetMsgIndex || 1) + amount);
+        if (SceneManager._scene && SceneManager._scene._sns && $gameSystem.getSNSConfig().show) {
+            $gameSystem._snsTargetMsgIndex = Math.min(Math.max(log.length - 1, 0), ($gameSystem._snsTargetMsgIndex || 1) + amount);
             SceneManager._scene._sns._refreshMessages();
         }
     });
@@ -635,7 +646,7 @@ var SNSBackgroundOpacity = 0;
             if (this.visible) {
                 const log = SNSManager.getLog();
                 if ($gameTemp._snsLogChanged && $gameSystem._targetIsLatest) {
-                    $gameSystem._snsTargetMsgIndex = log.length - 1
+                    $gameSystem._snsTargetMsgIndex = Math.max(log.length - 1, 0)
                     this._refreshMessages()
                     $gameTemp._snsLogChanged = false;
                 }
@@ -706,7 +717,7 @@ var SNSBackgroundOpacity = 0;
             const log = SNSManager.getLog();
             let targetIndex = ($gameSystem._snsTargetMsgIndex >= 0 && $gameSystem._snsTargetMsgIndex < log.length)
                 ? $gameSystem._snsTargetMsgIndex
-                : log.length - 1;
+                : Math.max(log.length - 1, 0);
 
             // 前回のターゲットインデックスを保存
             const prevTargetIndex = $gameSystem._snsLastTargetIndex ?? targetIndex;
