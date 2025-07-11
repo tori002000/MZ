@@ -79,7 +79,7 @@
                 break;
         }
     };
-    //既存メソッドの上書き（他プラグインとの競合注意）
+    //既存関数の上書き（他プラグインとの競合注意）
     Window_Base.prototype.flushTextState = function (textState) {
         const text = textState.buffer;
         const rtl = textState.rtl;
