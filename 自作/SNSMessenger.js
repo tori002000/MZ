@@ -2,6 +2,7 @@
 //2025/7/3 構造見直し・バグ修正
 //2025/7/5 再度構造見直し・スクロールアニメ追加
 //2025/7/6 SNS画面を閉じているとき・開いたときの挙動を変更
+//2025/7/27 1枚のスプライトとして表示するよう変更
 /*:
  * @target MZ
  * @plugindesc SNS風画面
@@ -541,7 +542,7 @@ var SNSBackgroundOpacity = 0;
                     $gameSystem._users = JsonEx.makeDeepCopy(data.users || {});
                     $gameSystem._snsLog = JsonEx.makeDeepCopy(data.log || []);
                     $gameSystem._snsSelfId = data.selfId || "0";
-                    $gameSystem._snsTargetMsgIndex=$gameSystem._snsLog;
+                    $gameSystem._snsTargetMsgIndex = $gameSystem._snsLog;
                     $gameTemp._snsLogChanged = true;
                 }
             }
@@ -633,6 +634,7 @@ var SNSBackgroundOpacity = 0;
             this._scrollTargetY = 0;
             this._scrollSpeed = scrollAnimSpeed; // 少し速め
             this._pendingScroll = false; // アニメーション開始フラグ
+            this._renderedSprite = null; // 追加: 初期化
         }
         update() {
             super.update();
@@ -656,10 +658,10 @@ var SNSBackgroundOpacity = 0;
                 if (this._msgContainer) {
                     if (this._pendingScroll) {
                         // イージング
-                        if (Math.abs(this._msgContainer.y - this._scrollTargetY) > 1) {
-                            this._msgContainer.y += (this._scrollTargetY - this._msgContainer.y) * this._scrollSpeed;
+                        if (Math.abs(this._renderedSprite.y - this._scrollTargetY) > 1) {
+                            this._renderedSprite.y += (this._scrollTargetY - this._renderedSprite.y) * this._scrollSpeed;
                         } else {
-                            this._msgContainer.y = this._scrollTargetY;
+                            this._renderedSprite.y = this._scrollTargetY;
                             this._pendingScroll = false;
                         }
                     }
@@ -668,13 +670,13 @@ var SNSBackgroundOpacity = 0;
                 if (snsDebug && this._msgContainer) {
                     const scrollStep = 60;
                     if (Input.isRepeated("pageup")) {
-                        this._msgContainer.y = this._msgContainer.y + scrollStep;
+                        this._renderedSprite.y = this._renderedSprite.y + scrollStep;
                     }
                     if (Input.isRepeated("pagedown")) {
-                        this._msgContainer.y = this._msgContainer.y - scrollStep;
+                        this._renderedSprite.y = this._renderedSprite.y - scrollStep;
                     }
                     const config = $gameSystem.getSNSConfig();
-                    config.scrollY = this._msgContainer.y;
+                    config.scrollY = this._renderedSprite.y;
                     $gameSystem.setSNSConfig(config);
                 }
             }
@@ -691,19 +693,26 @@ var SNSBackgroundOpacity = 0;
                 this.addChild(this._bg);
             }
             this._msgContainer = new Sprite();
-            this._msgContainer.y = (typeof st.scrollY === "number") ? st.scrollY : 10;
-            // 追加: スクロール目標値も初期化
-            this._scrollTargetY = this._msgContainer.y;
+            // 追加: _renderedSprite生成
+            if (!this._renderedSprite) {
+                this._renderedSprite = new PIXI.Sprite(PIXI.Texture.EMPTY);
+                this._renderedSprite.x = 0;
+                this._renderedSprite.y = (typeof st.scrollY === "number") ? st.scrollY : 10;
+                this._renderedSprite.alpha = 1;
+                this.addChild(this._renderedSprite);
+            }
+            // スクロール目標値も初期化
+            this._scrollTargetY = this._renderedSprite.y;
 
             // メッセージ部分にマスクを設定 
             const mask = new PIXI.Graphics();
             mask.beginFill(0xffffff);
             mask.drawRect(0, 0, cfg.width, cfg.height);
             mask.endFill();
-            this._msgContainer.mask = mask;
+            this._renderedSprite.mask = mask;
             this.addChild(mask);
 
-            this.addChild(this._msgContainer);
+            this.addChild(this._renderedSprite);
             this._isOver = true;
             this._inited = true;
             this._refreshMessages();
@@ -771,8 +780,31 @@ var SNSBackgroundOpacity = 0;
             this._topY = topY;
             this._bottomY = bottomY;
 
+            // --- ここからレンダーテクスチャ化 ---
+            // すべてのアイコンロード完了まで待つ
+            await Promise.all(bufferSprites.map(spr => spr.iconLoadPromise));
+
+            this._msgContainer.visible = true;
+
+            // ★ここでy座標を調整
+            this._msgContainer.y = -topY;
+
+            // レンダーテクスチャ作成
+            const renderer = Graphics.app.renderer || PIXI.autoDetectRenderer();
+            const renderTexture = PIXI.RenderTexture.create({ width: cfg.width, height: cfg.height *3});
+            renderer.render(this._msgContainer, renderTexture);
+
+            // スプライトのテクスチャのみ差し替え
+            if (this._renderedSprite) {
+                this._renderedSprite.texture = renderTexture;
+            }
+
+            // _msgContainer自体は非表示に
+            this._msgContainer.y = 0; // 元に戻す
+            this._msgContainer.visible = false;
+
             // スクロール位置調整
-            const newTargetY = Math.min(-topY, cfg.height - targetSpr._height);
+            const newTargetY = Math.min(-topY, cfg.height - targetSpr._height)+topY;
 
             // 方向判定
             let direction = 0;
@@ -781,12 +813,12 @@ var SNSBackgroundOpacity = 0;
 
             // 50px分ずらした位置からアニメーション開始
             if (direction !== 0 && scrollAnimOffset - this._topY > cfg.height) {
-                this._msgContainer.y = newTargetY + direction * scrollAnimOffset;
+                this._renderedSprite.y = newTargetY + direction * scrollAnimOffset;
                 this._scrollTargetY = newTargetY;
                 this._pendingScroll = true;
             } else {
                 // 初回や同じ位置なら即座に
-                this._msgContainer.y = newTargetY;
+                this._renderedSprite.y = newTargetY;
                 this._scrollTargetY = newTargetY;
                 this._pendingScroll = false;
             }
