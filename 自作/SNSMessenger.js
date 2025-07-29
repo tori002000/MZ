@@ -1,8 +1,10 @@
-//ほぼAIによるコード
-//2025/7/3 構造見直し・バグ修正
-//2025/7/5 再度構造見直し・スクロールアニメ追加
-//2025/7/6 SNS画面を閉じているとき・開いたときの挙動を変更
-//2025/7/27 1枚のスプライトとして表示するよう変更
+/*ほぼAIによるコード
+2025/7/3  構造見直し・バグ修正
+2025/7/5  再度構造見直し・スクロールアニメ追加
+2025/7/6  SNS画面を閉じているとき・開いたときの挙動を変更
+2025/7/27 1枚のスプライトとして表示するよう変更
+2025/7/29 透明度の変更コマンドの追加
+*/
 /*:
  * @target MZ
  * @plugindesc SNS風画面
@@ -317,6 +319,21 @@
  * @type number
  * @default 1
  * @desc 進める量
+ * 
+ * @command SetSNSOpacity
+ * @text SNS画面の不透明度変更
+ * @desc SNS画面の不透明度（アルファ値）を指定した値にアニメーションで変更します。
+ * @arg opacity
+ * @type number
+ * @decimals 2
+ * @default 1
+ * @text 不透明度
+ * @desc 0.0（完全透明）～1.0（完全不透明）で指定します。
+ * @arg frames
+ * @type number
+ * @default 30
+ * @text アニメーションフレーム数
+ * @desc 不透明度変更にかけるフレーム数（1なら即時変更）
  * @help
  * SNS風なメッセージ表示
  * 
@@ -602,6 +619,14 @@ var SNSBackgroundOpacity = 0;
             SceneManager._scene._sns._refreshMessages();
         }
     });
+    PluginManagerEx.registerCommand(document.currentScript, "SetSNSOpacity", args => {
+        //不透明度を変更する
+        const targetAlpha = Number(args.opacity) ?? 1;
+        const frames = Number(args.frames) ?? 30;
+        if (SceneManager._scene && SceneManager._scene._sns) {
+            SceneManager._scene._sns.startOpacityAnimation(targetAlpha, frames);
+        }
+    });
     // MAPシーン拡張：レイヤ追加
     const _spMap_load = Scene_Map.prototype.createSpriteset;
     Scene_Map.prototype.createSpriteset = function () {
@@ -666,6 +691,16 @@ var SNSBackgroundOpacity = 0;
                         }
                     }
                 }
+                //不透明度アニメーション
+                if (this._opacityAnim) {
+                    const anim = this._opacityAnim;
+                    anim.count++;
+                    const t = Math.min(anim.count / anim.frames, 1);
+                    const newAlpha = anim.start + (anim.end - anim.start) * t;
+                    this._renderedSprite.alpha = newAlpha;
+                    if (this._bg) this._bg.alpha = newAlpha; // 背景も連動
+                    if (t >= 1) this._opacityAnim = null;
+                }
                 // デバッグ用ページ送り
                 if (snsDebug && this._msgContainer) {
                     const scrollStep = 60;
@@ -680,6 +715,7 @@ var SNSBackgroundOpacity = 0;
                     $gameSystem.setSNSConfig(config);
                 }
             }
+
         }
 
         _init(st) {
@@ -780,7 +816,7 @@ var SNSBackgroundOpacity = 0;
             this._topY = topY;
             this._bottomY = bottomY;
 
-            // --- ここからレンダーテクスチャ化 ---
+            // レンダーテクスチャ化
             // すべてのアイコンロード完了まで待つ
             await Promise.all(bufferSprites.map(spr => spr.iconLoadPromise));
 
@@ -791,7 +827,7 @@ var SNSBackgroundOpacity = 0;
 
             // レンダーテクスチャ作成
             const renderer = Graphics.app.renderer || PIXI.autoDetectRenderer();
-            const renderTexture = PIXI.RenderTexture.create({ width: cfg.width, height: cfg.height *3});
+            const renderTexture = PIXI.RenderTexture.create({ width: cfg.width, height: cfg.height * 3 });
             renderer.render(this._msgContainer, renderTexture);
 
             // スプライトのテクスチャのみ差し替え
@@ -800,11 +836,11 @@ var SNSBackgroundOpacity = 0;
             }
 
             // _msgContainer自体は非表示に
-            this._msgContainer.y = 0; // 元に戻す
+            this._msgContainer.y = 0;
             this._msgContainer.visible = false;
 
             // スクロール位置調整
-            const newTargetY = Math.min(-topY, cfg.height - targetSpr._height)+topY;
+            const newTargetY = Math.min(-topY, cfg.height - targetSpr._height) + topY;
 
             // 方向判定
             let direction = 0;
@@ -825,7 +861,14 @@ var SNSBackgroundOpacity = 0;
 
             this._loading = false;
         }
-
+        startOpacityAnimation(targetAlpha, frames) {
+            this._opacityAnim = {
+                start: this._renderedSprite.alpha,
+                end: targetAlpha,
+                frames: frames,
+                count: 0
+            };
+        };
     }
 
     class SNSMessageWindowFrame extends Sprite {
